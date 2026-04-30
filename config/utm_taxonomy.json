@@ -1,0 +1,62 @@
+{
+  "utm_source": [
+    "meta",
+    "google",
+    "linkedin",
+    "tiktok",
+    "programatica"
+  ],
+  "utm_medium": [
+    "paid_social",
+    "paid_search",
+    "display",
+    "video",
+    "native"
+  ],
+  "utm_campaign": {
+    "description": "Formato: [produto]_[funil]_[objetivo]_[ano-mes]",
+    "funil": [
+      "topo",
+      "meio",
+      "fundo"
+    ],
+    "objetivo": [
+      "leads",
+      "vendas",
+      "trafego",
+      "awareness",
+      "retencao"
+    ],
+    "ano_mes_format": "YYYY-MM"
+  },
+  "utm_content": {
+    "description": "Formato: [tipo]_[angulo]_[variacao]",
+    "tipo": [
+      "video",
+      "imagem",
+      "carrossel",
+      "stories",
+      "texto"
+    ],
+    "examples": [
+      "video_dor_v1",
+      "imagem_beneficio_v2",
+      "carrossel_prova_v1"
+    ]
+  },
+  "utm_term": {
+    "description": "Keyword exata (search) ou nome do público (social)",
+    "examples": [
+      "software-gestao",
+      "lookalike-clientes",
+      "retargeting-visitantes"
+    ]
+  },
+  "rules": {
+    "lowercase_only": true,
+    "no_accents": true,
+    "no_spaces": true,
+    "field_separator": "_",
+    "word_separator_within_field": "-"
+  }
+}

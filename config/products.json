@@ -1,0 +1,60 @@
+{
+  "produtos": [
+    {
+      "nome": "produto-a",
+      "posicionamento": "Descreva o posicionamento único do produto no mercado",
+      "icp": {
+        "cargo": "Ex: Diretor, Gerente, Empresário",
+        "setor": "Ex: Tecnologia, Varejo, Saúde",
+        "tamanho_empresa": "Ex: 10-50 funcionários",
+        "dores_principais": [
+          "Dor 1 do cliente ideal",
+          "Dor 2 do cliente ideal",
+          "Dor 3 do cliente ideal"
+        ],
+        "gatilhos_compra": [
+          "Gatilho 1",
+          "Gatilho 2"
+        ]
+      },
+      "ticket_medio": 0,
+      "roas_meta": 4.0,
+      "cpl_meta": 100.0,
+      "canais_ativos": ["meta", "google"],
+      "historico_criativos": [
+        {
+          "tipo": "video",
+          "angulo": "dor",
+          "performance": "alto",
+          "descricao": "Descrição do criativo que performou bem"
+        }
+      ],
+      "sazonalidade": {
+        "meses_alta": ["11", "12"],
+        "meses_baixa": ["01", "02"],
+        "observacoes": "Notas sobre sazonalidade"
+      },
+      "concorrentes": [
+        {
+          "nome": "Concorrente A",
+          "diferencial_vs_nos": "O que nos diferencia dele"
+        }
+      ],
+      "objecoes": [
+        {
+          "objecao": "É muito caro",
+          "resposta": "Argumento de resposta"
+        },
+        {
+          "objecao": "Não tenho tempo para implementar",
+          "resposta": "Argumento de resposta"
+        }
+      ],
+      "benchmarks": {
+        "meta": {"cpl": 0, "cpc": 0, "ctr": 0, "roas": 0},
+        "google": {"cpl": 0, "cpc": 0, "ctr": 0, "roas": 0},
+        "linkedin": {"cpl": 0, "cpc": 0, "ctr": 0, "roas": 0}
+      }
+    }
+  ]
+}
