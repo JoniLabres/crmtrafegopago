@@ -1,0 +1,461 @@
+{
+  "exportFormatVersion": 2,
+  "containerVersion": {
+    "path": "accounts/GTM_ACCOUNT_ID/containers/GTM_CONTAINER_ID/versions/0",
+    "accountId": "GTM_ACCOUNT_ID",
+    "containerId": "GTM_CONTAINER_ID",
+    "name": "trafego-pago v1.0",
+    "variable": [
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "variableId": "1",
+        "name": "URL - utm_source",
+        "type": "v",
+        "parameter": [
+          {"type": "INTEGER", "key": "dataLayerVersion", "value": "2"},
+          {"type": "BOOLEAN", "key": "setDefaultValue", "value": "false"},
+          {"type": "TEMPLATE", "key": "name", "value": "utm_source"},
+          {"type": "TEMPLATE", "key": "varType", "value": "URL"},
+          {"type": "TEMPLATE", "key": "urlParts", "value": "QUERY"},
+          {"type": "TEMPLATE", "key": "queryKey", "value": "utm_source"}
+        ]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "variableId": "2",
+        "name": "URL - utm_medium",
+        "type": "v",
+        "parameter": [
+          {"type": "INTEGER", "key": "dataLayerVersion", "value": "2"},
+          {"type": "BOOLEAN", "key": "setDefaultValue", "value": "false"},
+          {"type": "TEMPLATE", "key": "name", "value": "utm_medium"},
+          {"type": "TEMPLATE", "key": "varType", "value": "URL"},
+          {"type": "TEMPLATE", "key": "urlParts", "value": "QUERY"},
+          {"type": "TEMPLATE", "key": "queryKey", "value": "utm_medium"}
+        ]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "variableId": "3",
+        "name": "URL - utm_campaign",
+        "type": "v",
+        "parameter": [
+          {"type": "INTEGER", "key": "dataLayerVersion", "value": "2"},
+          {"type": "BOOLEAN", "key": "setDefaultValue", "value": "false"},
+          {"type": "TEMPLATE", "key": "name", "value": "utm_campaign"},
+          {"type": "TEMPLATE", "key": "varType", "value": "URL"},
+          {"type": "TEMPLATE", "key": "urlParts", "value": "QUERY"},
+          {"type": "TEMPLATE", "key": "queryKey", "value": "utm_campaign"}
+        ]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "variableId": "4",
+        "name": "URL - utm_content",
+        "type": "v",
+        "parameter": [
+          {"type": "INTEGER", "key": "dataLayerVersion", "value": "2"},
+          {"type": "BOOLEAN", "key": "setDefaultValue", "value": "false"},
+          {"type": "TEMPLATE", "key": "name", "value": "utm_content"},
+          {"type": "TEMPLATE", "key": "varType", "value": "URL"},
+          {"type": "TEMPLATE", "key": "urlParts", "value": "QUERY"},
+          {"type": "TEMPLATE", "key": "queryKey", "value": "utm_content"}
+        ]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "variableId": "5",
+        "name": "URL - utm_term",
+        "type": "v",
+        "parameter": [
+          {"type": "INTEGER", "key": "dataLayerVersion", "value": "2"},
+          {"type": "BOOLEAN", "key": "setDefaultValue", "value": "false"},
+          {"type": "TEMPLATE", "key": "name", "value": "utm_term"},
+          {"type": "TEMPLATE", "key": "varType", "value": "URL"},
+          {"type": "TEMPLATE", "key": "urlParts", "value": "QUERY"},
+          {"type": "TEMPLATE", "key": "queryKey", "value": "utm_term"}
+        ]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "variableId": "6",
+        "name": "DL - form_id",
+        "type": "v",
+        "parameter": [
+          {"type": "INTEGER", "key": "dataLayerVersion", "value": "2"},
+          {"type": "BOOLEAN", "key": "setDefaultValue", "value": "false"},
+          {"type": "TEMPLATE", "key": "name", "value": "form_id"},
+          {"type": "TEMPLATE", "key": "varType", "value": "DATA_LAYER"}
+        ]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "variableId": "7",
+        "name": "DL - page_path",
+        "type": "v",
+        "parameter": [
+          {"type": "INTEGER", "key": "dataLayerVersion", "value": "2"},
+          {"type": "BOOLEAN", "key": "setDefaultValue", "value": "false"},
+          {"type": "TEMPLATE", "key": "name", "value": "page_path"},
+          {"type": "TEMPLATE", "key": "varType", "value": "DATA_LAYER"}
+        ]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "variableId": "8",
+        "name": "DL - lead_value",
+        "type": "v",
+        "parameter": [
+          {"type": "INTEGER", "key": "dataLayerVersion", "value": "2"},
+          {"type": "BOOLEAN", "key": "setDefaultValue", "value": "false"},
+          {"type": "TEMPLATE", "key": "name", "value": "lead_value"},
+          {"type": "TEMPLATE", "key": "varType", "value": "DATA_LAYER"}
+        ]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "variableId": "9",
+        "name": "Cookie - _fbp",
+        "type": "k",
+        "parameter": [
+          {"type": "TEMPLATE", "key": "name", "value": "_fbp"},
+          {"type": "BOOLEAN", "key": "decodeCookie", "value": "false"}
+        ]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "variableId": "10",
+        "name": "Cookie - _ga",
+        "type": "k",
+        "parameter": [
+          {"type": "TEMPLATE", "key": "name", "value": "_ga"},
+          {"type": "BOOLEAN", "key": "decodeCookie", "value": "false"}
+        ]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "variableId": "11",
+        "name": "Const - GA4 Measurement ID",
+        "type": "c",
+        "parameter": [
+          {"type": "TEMPLATE", "key": "value", "value": "{{GA4_MEASUREMENT_ID}}"}
+        ]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "variableId": "12",
+        "name": "Const - Meta Pixel ID",
+        "type": "c",
+        "parameter": [
+          {"type": "TEMPLATE", "key": "value", "value": "{{META_PIXEL_ID}}"}
+        ]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "variableId": "13",
+        "name": "Const - LinkedIn Partner ID",
+        "type": "c",
+        "parameter": [
+          {"type": "TEMPLATE", "key": "value", "value": "{{LINKEDIN_PARTNER_ID}}"}
+        ]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "variableId": "14",
+        "name": "Const - TikTok Pixel ID",
+        "type": "c",
+        "parameter": [
+          {"type": "TEMPLATE", "key": "value", "value": "{{TIKTOK_PIXEL_ID}}"}
+        ]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "variableId": "15",
+        "name": "DL - event_id",
+        "type": "v",
+        "parameter": [
+          {"type": "INTEGER", "key": "dataLayerVersion", "value": "2"},
+          {"type": "BOOLEAN", "key": "setDefaultValue", "value": "false"},
+          {"type": "TEMPLATE", "key": "name", "value": "event_id"},
+          {"type": "TEMPLATE", "key": "varType", "value": "DATA_LAYER"}
+        ]
+      }
+    ],
+    "trigger": [
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "triggerId": "1",
+        "name": "Pageview - All Pages",
+        "type": "PAGEVIEW"
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "triggerId": "2",
+        "name": "Form Submit - All Forms",
+        "type": "FORM_SUBMISSION",
+        "filter": [
+          {
+            "type": "CONTAINS",
+            "parameter": [
+              {"type": "TEMPLATE", "key": "arg0", "value": "{{Page URL}}"},
+              {"type": "TEMPLATE", "key": "arg1", "value": ""}
+            ]
+          }
+        ],
+        "parameter": [
+          {"type": "BOOLEAN", "key": "waitForTags", "value": "true"},
+          {"type": "BOOLEAN", "key": "checkValidation", "value": "true"},
+          {"type": "BOOLEAN", "key": "waitForTagsTimeout", "value": "2000"}
+        ]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "triggerId": "3",
+        "name": "Custom Event - lead_generated",
+        "type": "CUSTOM_EVENT",
+        "customEventFilter": [
+          {
+            "type": "EQUALS",
+            "parameter": [
+              {"type": "TEMPLATE", "key": "arg0", "value": "{{_event}}"},
+              {"type": "TEMPLATE", "key": "arg1", "value": "lead_generated"}
+            ]
+          }
+        ]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "triggerId": "4",
+        "name": "Custom Event - purchase_completed",
+        "type": "CUSTOM_EVENT",
+        "customEventFilter": [
+          {
+            "type": "EQUALS",
+            "parameter": [
+              {"type": "TEMPLATE", "key": "arg0", "value": "{{_event}}"},
+              {"type": "TEMPLATE", "key": "arg1", "value": "purchase_completed"}
+            ]
+          }
+        ]
+      }
+    ],
+    "tag": [
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "tagId": "1",
+        "name": "GA4 - Configuration",
+        "type": "googtag",
+        "parameter": [
+          {"type": "TEMPLATE", "key": "tagId", "value": "{{Const - GA4 Measurement ID}}"}
+        ],
+        "firingTriggerId": ["1"]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "tagId": "2",
+        "name": "GA4 - Event lead_generated",
+        "type": "gaawe",
+        "parameter": [
+          {"type": "TEMPLATE", "key": "measurementId", "value": "{{Const - GA4 Measurement ID}}"},
+          {"type": "TEMPLATE", "key": "eventName", "value": "lead_generated"},
+          {
+            "type": "LIST",
+            "key": "eventParameters",
+            "list": [
+              {
+                "type": "MAP",
+                "map": [
+                  {"type": "TEMPLATE", "key": "name", "value": "utm_source"},
+                  {"type": "TEMPLATE", "key": "value", "value": "{{URL - utm_source}}"}
+                ]
+              },
+              {
+                "type": "MAP",
+                "map": [
+                  {"type": "TEMPLATE", "key": "name", "value": "utm_medium"},
+                  {"type": "TEMPLATE", "key": "value", "value": "{{URL - utm_medium}}"}
+                ]
+              },
+              {
+                "type": "MAP",
+                "map": [
+                  {"type": "TEMPLATE", "key": "name", "value": "utm_campaign"},
+                  {"type": "TEMPLATE", "key": "value", "value": "{{URL - utm_campaign}}"}
+                ]
+              },
+              {
+                "type": "MAP",
+                "map": [
+                  {"type": "TEMPLATE", "key": "name", "value": "utm_content"},
+                  {"type": "TEMPLATE", "key": "value", "value": "{{URL - utm_content}}"}
+                ]
+              },
+              {
+                "type": "MAP",
+                "map": [
+                  {"type": "TEMPLATE", "key": "name", "value": "utm_term"},
+                  {"type": "TEMPLATE", "key": "value", "value": "{{URL - utm_term}}"}
+                ]
+              },
+              {
+                "type": "MAP",
+                "map": [
+                  {"type": "TEMPLATE", "key": "name", "value": "form_id"},
+                  {"type": "TEMPLATE", "key": "value", "value": "{{DL - form_id}}"}
+                ]
+              },
+              {
+                "type": "MAP",
+                "map": [
+                  {"type": "TEMPLATE", "key": "name", "value": "lead_value"},
+                  {"type": "TEMPLATE", "key": "value", "value": "{{DL - lead_value}}"}
+                ]
+              }
+            ]
+          }
+        ],
+        "firingTriggerId": ["3"]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "tagId": "3",
+        "name": "GA4 - Event purchase_completed",
+        "type": "gaawe",
+        "parameter": [
+          {"type": "TEMPLATE", "key": "measurementId", "value": "{{Const - GA4 Measurement ID}}"},
+          {"type": "TEMPLATE", "key": "eventName", "value": "purchase"},
+          {
+            "type": "LIST",
+            "key": "eventParameters",
+            "list": [
+              {
+                "type": "MAP",
+                "map": [
+                  {"type": "TEMPLATE", "key": "name", "value": "utm_campaign"},
+                  {"type": "TEMPLATE", "key": "value", "value": "{{URL - utm_campaign}}"}
+                ]
+              },
+              {
+                "type": "MAP",
+                "map": [
+                  {"type": "TEMPLATE", "key": "name", "value": "value"},
+                  {"type": "TEMPLATE", "key": "value", "value": "{{DL - lead_value}}"}
+                ]
+              },
+              {
+                "type": "MAP",
+                "map": [
+                  {"type": "TEMPLATE", "key": "name", "value": "currency"},
+                  {"type": "TEMPLATE", "key": "value", "value": "BRL"}
+                ]
+              }
+            ]
+          }
+        ],
+        "firingTriggerId": ["4"]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "tagId": "4",
+        "name": "Meta Pixel - PageView",
+        "type": "html",
+        "parameter": [
+          {
+            "type": "TEMPLATE",
+            "key": "html",
+            "value": "<!-- Meta Pixel Code -->\n<script>\n!function(f,b,e,v,n,t,s)\n{if(f.fbq)return;n=f.fbq=function(){n.callMethod?\nn.callMethod.apply(n,arguments):n.queue.push(arguments)};\nif(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';\nn.queue=[];t=b.createElement(e);t.async=!0;\nt.src=v;s=b.getElementsByTagName(e)[0];\ns.parentNode.insertBefore(t,s)}(window, document,'script',\n'https://connect.facebook.net/en_US/fbevents.js');\nfbq('init', '{{Const - Meta Pixel ID}}');\nfbq('track', 'PageView');\n</script>"
+          },
+          {"type": "BOOLEAN", "key": "supportDocumentWrite", "value": "false"}
+        ],
+        "firingTriggerId": ["1"]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "tagId": "5",
+        "name": "Meta Pixel - Lead",
+        "type": "html",
+        "parameter": [
+          {
+            "type": "TEMPLATE",
+            "key": "html",
+            "value": "<script>\nfbq('track', 'Lead', {\n  content_name: '{{URL - utm_campaign}}',\n  content_category: '{{URL - utm_source}}',\n  value: {{DL - lead_value}},\n  currency: 'BRL'\n}, {\n  eventID: '{{DL - event_id}}'\n});\n</script>"
+          },
+          {"type": "BOOLEAN", "key": "supportDocumentWrite", "value": "false"}
+        ],
+        "firingTriggerId": ["3"]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "tagId": "6",
+        "name": "LinkedIn - Insight Tag",
+        "type": "html",
+        "parameter": [
+          {
+            "type": "TEMPLATE",
+            "key": "html",
+            "value": "<script type=\"text/javascript\">\n_linkedin_partner_id = \"{{Const - LinkedIn Partner ID}}\";\nwindow._linkedin_data_partner_ids = window._linkedin_data_partner_ids || [];\nwindow._linkedin_data_partner_ids.push(_linkedin_partner_id);\n</script>\n<script type=\"text/javascript\">\n(function(l) {\nif (!l){window.lintrk = function(a,b){window.lintrk.q.push([a,b])};\nwindow.lintrk.q=[]}\nvar s = document.getElementsByTagName(\"script\")[0];\nvar b = document.createElement(\"script\");\nb.type = \"text/javascript\";b.async = true;\nb.src = \"https://snap.licdn.com/li.lms-analytics/insight.min.js\";\ns.parentNode.insertBefore(b, s);})(window.lintrk);\n</script>"
+          },
+          {"type": "BOOLEAN", "key": "supportDocumentWrite", "value": "false"}
+        ],
+        "firingTriggerId": ["1"]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "tagId": "7",
+        "name": "TikTok Pixel - PageView",
+        "type": "html",
+        "parameter": [
+          {
+            "type": "TEMPLATE",
+            "key": "html",
+            "value": "<script>\n!function (w, d, t) {\n  w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=[\"page\",\"track\",\"identify\",\"instances\",\"debug\",\"on\",\"off\",\"once\",\"ready\",\"alias\",\"group\",\"enableCookie\",\"disableCookie\"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){var i=\"https://analytics.tiktok.com/i18n/pixel/events.js\";ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=i,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n||{};var o=document.createElement(\"script\");o.type=\"text/javascript\",o.async=!0,o.src=i+\"?sdkid=\"+e+\"&lib=\"+t;var a=document.getElementsByTagName(\"script\")[0];a.parentNode.insertBefore(o,a)};\n  ttq.load('{{Const - TikTok Pixel ID}}');\n  ttq.page();\n}(window, document, 'ttq');\n</script>"
+          },
+          {"type": "BOOLEAN", "key": "supportDocumentWrite", "value": "false"}
+        ],
+        "firingTriggerId": ["1"]
+      },
+      {
+        "accountId": "GTM_ACCOUNT_ID",
+        "containerId": "GTM_CONTAINER_ID",
+        "tagId": "8",
+        "name": "TikTok Pixel - Lead",
+        "type": "html",
+        "parameter": [
+          {
+            "type": "TEMPLATE",
+            "key": "html",
+            "value": "<script>\nttq.track('SubmitForm', {\n  content_name: '{{URL - utm_campaign}}',\n  content_id: '{{DL - form_id}}',\n  value: '{{DL - lead_value}}',\n  currency: 'BRL'\n});\n</script>"
+          },
+          {"type": "BOOLEAN", "key": "supportDocumentWrite", "value": "false"}
+        ],
+        "firingTriggerId": ["3"]
+      }
+    ]
+  }
+}
