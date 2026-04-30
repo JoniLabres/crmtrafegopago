@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block topbar_title %}Dashboard — Visão Geral{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Dashboard</h1>
+  <p class="page-desc">Desempenho consolidado dos últimos {{ days }} dias</p>
+</div>
+
+<!-- KPIs -->
+<div class="kpi-grid">
+  <div class="kpi-card">
+    <div class="kpi-label">Total Investido</div>
+    <div class="kpi-value green">R$ {{ "%.0f"|format(kpis.spend) }}</div>
+    <div class="kpi-sub">{{ kpis.channels }} canais ativos</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Leads Gerados</div>
+    <div class="kpi-value">{{ kpis.leads }}</div>
+    <div class="kpi-sub">CPL médio R$ {{ "%.2f"|format(kpis.cpl) }}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Receita Atribuída</div>
+    <div class="kpi-value">R$ {{ "%.0f"|format(kpis.revenue) }}</div>
+    <div class="kpi-sub">{{ kpis.deals }} negócios fechados</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">ROAS Médio</div>
+    <div class="kpi-value {% if kpis.roas >= 3 %}green{% endif %}">{{ "%.2f"|format(kpis.roas) }}x</div>
+    <div class="kpi-sub">Meta: {% if kpis.roas_meta %}{{ kpis.roas_meta }}x{% else %}—{% endif %}</div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <!-- Desempenho por canal -->
+  <div class="panel">
+    <div class="panel-head">
+      <h3>Desempenho por Canal</h3>
+      <span class="text-muted text-sm">últimos {{ days }}d</span>
+    </div>
+    <div class="panel-body" style="padding:0;">
+      <table>
+        <thead>
+          <tr>
+            <th>Canal</th>
+            <th>Spend</th>
+            <th>Leads</th>
+            <th>CPL</th>
+            <th>ROAS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in by_channel %}
+          <tr>
+            <td><span class="badge badge-{{ r.channel }}">{{ r.channel }}</span></td>
+            <td>R$ {{ "%.0f"|format(r.spend) }}</td>
+            <td>{{ r.leads }}</td>
+            <td>R$ {{ "%.2f"|format(r.cpl) }}</td>
+            <td class="{% if r.roas >= 3 %}text-green{% endif %}">{{ "%.2f"|format(r.roas) }}x</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:2rem;">Sem dados — configure o pipeline e rode o health check</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Alertas recentes -->
+  <div class="panel">
+    <div class="panel-head">
+      <h3>Alertas Recentes</h3>
+      <a href="/alertas" class="btn btn-ghost btn-sm">Ver todos</a>
+    </div>
+    <div class="panel-body">
+      {% for a in alerts %}
+      <div class="alert-item">
+        <span class="alert-dot {{ a.severity }}"></span>
+        <div style="flex:1;">
+          <div class="alert-text">{{ a.message }}</div>
+          <div class="alert-meta">{{ a.alert_type }} · {{ a.sent_at }}</div>
+        </div>
+        <span class="alert-sev {{ a.severity }}">{{ a.severity.upper() }}</span>
+      </div>
+      {% else %}
+      <div style="text-align:center;color:var(--muted);padding:1.5rem 0;font-size:0.875rem;">
+        Nenhum alerta ativo nas últimas 48h
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Top campanhas -->
+<div class="panel mt-2">
+  <div class="panel-head">
+    <h3>Top Campanhas por ROAS</h3>
+    <a href="/campanhas" class="btn btn-ghost btn-sm">Ver todas</a>
+  </div>
+  <div style="padding:0;">
+    <table>
+      <thead>
+        <tr>
+          <th>Campanha (UTM)</th>
+          <th>Canal</th>
+          <th>Produto</th>
+          <th>Spend</th>
+          <th>Leads</th>
+          <th>Receita</th>
+          <th>ROAS</th>
+          <th>CPL</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in top_campaigns %}
+        <tr>
+          <td style="font-family:monospace;font-size:0.78rem;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.campaign_utm }}</td>
+          <td><span class="badge badge-{{ c.channel }}">{{ c.channel }}</span></td>
+          <td>{{ c.produto }}</td>
+          <td>R$ {{ "%.0f"|format(c.spend) }}</td>
+          <td>{{ c.leads }}</td>
+          <td>R$ {{ "%.0f"|format(c.revenue) }}</td>
+          <td class="{% if c.roas >= 3 %}text-green{% endif %}">{{ "%.2f"|format(c.roas) }}x</td>
+          <td>R$ {{ "%.2f"|format(c.cpl) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:2rem;">Nenhuma campanha no período</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

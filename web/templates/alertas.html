@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Alertas{% endblock %}
+{% block topbar_title %}Alertas — Monitoramento{% endblock %}
+
+{% block content %}
+<div class="page-header flex items-center" style="justify-content:space-between;">
+  <div>
+    <h1 class="page-title">Alertas</h1>
+    <p class="page-desc">Monitoramento automático de CPL, ROAS, leads e budget</p>
+  </div>
+  <button class="btn btn-outline" onclick="runChecks()">Verificar agora</button>
+</div>
+
+<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);">
+  <div class="kpi-card">
+    <div class="kpi-label">Total 48h</div>
+    <div class="kpi-value">{{ stats.total }}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Críticos</div>
+    <div class="kpi-value" style="color:var(--danger);">{{ stats.critico }}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Atenção</div>
+    <div class="kpi-value" style="color:var(--warn);">{{ stats.atencao }}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Resolvidos</div>
+    <div class="kpi-value green">{{ stats.ok }}</div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="filterAlerts('')">Todos ({{ stats.total }})</div>
+  <div class="tab" onclick="filterAlerts('critico')">Críticos</div>
+  <div class="tab" onclick="filterAlerts('atencao')">Atenção</div>
+  <div class="tab" onclick="filterAlerts('cpl_alto')">CPL alto</div>
+  <div class="tab" onclick="filterAlerts('roas_baixo')">ROAS baixo</div>
+  <div class="tab" onclick="filterAlerts('queda_leads')">Queda leads</div>
+</div>
+
+<div class="panel">
+  <div id="alert-list">
+    {% for a in alerts %}
+    <div class="alert-item" data-type="{{ a.alert_type }}" data-sev="{{ a.severity }}">
+      <span class="alert-dot {{ a.severity }}"></span>
+      <div style="flex:1;">
+        <div class="alert-text fw-700">{{ a.message }}</div>
+        <div class="alert-meta flex gap-2 mt-1">
+          <span class="badge {% if a.severity == 'critico' %}badge-danger{% elif a.severity == 'atencao' %}badge-warn{% else %}badge-ok{% endif %}">{{ a.severity }}</span>
+          <span>{{ a.alert_type }}</span>
+          {% if a.campaign_utm %}<span style="font-family:monospace;">{{ a.campaign_utm }}</span>{% endif %}
+          <span>{{ a.sent_at }}</span>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div style="text-align:center;color:var(--muted);padding:3rem;font-size:0.875rem;">
+      Nenhum alerta nas últimas 48h.<br>
+      <span class="text-green">Sistema operando dentro das metas.</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Thresholds -->
+<div class="panel">
+  <div class="panel-head">
+    <h3>Metas por Produto</h3>
+    <button class="btn btn-ghost btn-sm" onclick="saveThresholds()">Salvar</button>
+  </div>
+  <div class="panel-body">
+    {% for produto, t in thresholds.items() %}
+    <div style="margin-bottom:1.5rem;">
+      <div style="font-size:0.875rem;font-weight:700;color:var(--primary);margin-bottom:0.75rem;">{{ produto }}</div>
+      <div class="form-grid" style="grid-template-columns:repeat(4,1fr);">
+        <div class="form-group">
+          <label>Meta CPL (R$)</label>
+          <input class="input input-dark" data-produto="{{ produto }}" data-key="cpl_meta" value="{{ t.cpl_meta }}" type="number">
+        </div>
+        <div class="form-group">
+          <label>Meta ROAS (x)</label>
+          <input class="input input-dark" data-produto="{{ produto }}" data-key="roas_meta" value="{{ t.roas_meta }}" type="number" step="0.1">
+        </div>
+        <div class="form-group">
+          <label>Leads/dia</label>
+          <input class="input input-dark" data-produto="{{ produto }}" data-key="leads_meta_diario" value="{{ t.leads_meta_diario }}" type="number">
+        </div>
+        <div class="form-group">
+          <label>Budget Mensal (R$)</label>
+          <input class="input input-dark" data-produto="{{ produto }}" data-key="budget_mensal" value="{{ t.budget_mensal }}" type="number">
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterAlerts(filter) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  document.querySelectorAll('.alert-item').forEach(item => {
+    if (!filter) { item.style.display = ''; return; }
+    const match = item.dataset.type === filter || item.dataset.sev === filter;
+    item.style.display = match ? '' : 'none';
+  });
+}
+async function runChecks() {
+  showToast('Verificando alertas...', 'ok');
+  const r = await fetch('/api/alerts/check', {method:'POST'});
+  const d = await r.json();
+  showToast(`${d.count} alerta(s) encontrado(s). Recarregando...`);
+  setTimeout(() => location.reload(), 1500);
+}
+async function saveThresholds() {
+  const data = {};
+  document.querySelectorAll('[data-produto]').forEach(el => {
+    const p = el.dataset.produto; const k = el.dataset.key;
+    if (!data[p]) data[p] = {};
+    data[p][k] = parseFloat(el.value);
+  });
+  const r = await fetch('/api/alerts/thresholds', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)});
+  const d = await r.json();
+  showToast(d.message || 'Salvo!');
+}
+</script>
+{% endblock %}

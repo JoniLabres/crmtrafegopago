@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Agente IA{% endblock %}
+{% block topbar_title %}Agente IA — Claude{% endblock %}
+
+{% block head %}
+<style>
+  .page { padding: 0; display: flex; flex-direction: column; height: calc(100vh - 56px); }
+  .agent-top { padding: 1.25rem 2rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+  .agent-top-left h2 { font-size: 1rem; font-weight: 700; }
+  .agent-top-left p  { font-size: 0.8rem; color: var(--muted); }
+  .product-selector { display: flex; align-items: center; gap: 0.75rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="agent-top">
+  <div class="agent-top-left">
+    <h2>Agente de Tráfego Pago</h2>
+    <p>Powered by Claude · usa dados reais do dashboard</p>
+  </div>
+  <div class="product-selector">
+    <label style="font-size:0.8rem;color:var(--muted);">Produto ativo:</label>
+    <select id="product-select" class="input input-dark" style="border-radius:50px;padding:0.375rem 1rem;font-size:0.8rem;" onchange="setProduct(this.value)">
+      <option value="">— selecione —</option>
+      {% for p in produtos %}<option value="{{ p }}" {% if p == active_product %}selected{% endif %}>{{ p }}</option>{% endfor %}
+    </select>
+    <button class="btn btn-ghost btn-sm" onclick="resetChat()">Limpar chat</button>
+  </div>
+</div>
+
+<div class="chat-wrap">
+  <div class="chat-messages" id="chat-messages">
+    <div class="msg agent fade-up">
+      <div class="msg-bubble">Olá! Sou seu agente de tráfego pago com IA.
+
+Selecione um produto no topo e use os comandos abaixo, ou me faça qualquer pergunta sobre suas campanhas.</div>
+      <div class="msg-meta">Agente · agora</div>
+    </div>
+  </div>
+
+  <div class="chat-cmds">
+    <span class="cmd-chip" onclick="sendCmd('/diagnostico')">/diagnostico</span>
+    <span class="cmd-chip" onclick="sendCmd('/otimizar')">/otimizar</span>
+    <span class="cmd-chip" onclick="sendCmd('/criar')">/criar campanha</span>
+    <span class="cmd-chip" onclick="sendCmd('/prever 5000')">/prever R$5.000</span>
+    <span class="cmd-chip" onclick="sendCmd('/briefing')">/briefing</span>
+  </div>
+
+  <div class="chat-input-row">
+    <textarea id="chat-input" rows="1" placeholder="Faça uma pergunta ou use um /comando..." onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+    <button class="btn btn-primary" id="send-btn" onclick="sendMessage()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+    </button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let isLoading = false;
+
+async function setProduct(name) {
+  if (!name) return;
+  const r = await fetch('/api/agent/product', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({product: name})});
+  const d = await r.json();
+  document.getElementById('product-badge').textContent = name;
+  showToast(`Produto ativo: ${name}`);
+  appendMsg('agent', `Produto **${name}** carregado. Contexto e métricas atualizados.`);
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if (!msg || isLoading) return;
+  input.value = '';
+  autoResize(input);
+  appendMsg('user', msg);
+  await callAgent(msg);
+}
+
+async function sendCmd(cmd) {
+  appendMsg('user', cmd);
+  await callAgent(cmd);
+}
+
+async function callAgent(message) {
+  isLoading = true;
+  document.getElementById('send-btn').disabled = true;
+  const thinking = appendMsg('agent', '...', true);
+  try {
+    const r = await fetch('/api/agent/chat', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({message})
+    });
+    const d = await r.json();
+    thinking.remove();
+    if (d.reply) appendMsg('agent', d.reply);
+    else appendMsg('agent', `Erro: ${d.error || 'falha desconhecida'}`);
+  } catch(e) {
+    thinking.remove();
+    appendMsg('agent', `Erro de conexão: ${e.message}`);
+  } finally {
+    isLoading = false;
+    document.getElementById('send-btn').disabled = false;
+  }
+}
+
+function appendMsg(role, text, isPulse=false) {
+  const msgs = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = `msg ${role} fade-up`;
+  const time = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+  div.innerHTML = `
+    <div class="msg-bubble ${isPulse ? 'pulse' : ''}">${escHtml(text)}</div>
+    <div class="msg-meta">${role === 'user' ? 'Você' : 'Agente'} · ${time}</div>
+  `;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function resetChat() {
+  fetch('/api/agent/reset', {method:'POST'});
+  document.getElementById('chat-messages').innerHTML = '';
+  appendMsg('agent', 'Chat limpo. Selecione um produto e comece.');
+}
+</script>
+{% endblock %}

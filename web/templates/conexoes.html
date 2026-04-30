@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}Conexões{% endblock %}
+{% block topbar_title %}Conexões — APIs dos Canais{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Conexões</h1>
+  <p class="page-desc">Configure as credenciais de cada canal. Os dados são salvos no arquivo .env do projeto.</p>
+</div>
+
+<div class="conn-grid">
+
+  <!-- Meta Ads -->
+  <div class="conn-card">
+    <div class="conn-header">
+      <div class="conn-icon" style="background:rgba(24,119,242,0.15);">📘</div>
+      <div>
+        <div class="conn-name">Meta Ads</div>
+        <div class="conn-status {{ 'ok' if env.META_ACCESS_TOKEN else 'na' }}">
+          {{ '✓ Conectado' if env.META_ACCESS_TOKEN else '○ Não configurado' }}
+        </div>
+      </div>
+    </div>
+    <form class="conn-body" onsubmit="saveEnv(event, 'meta')">
+      <div class="form-group">
+        <label>Access Token</label>
+        <input name="META_ACCESS_TOKEN" class="input input-dark" type="password" placeholder="EAAxxxxxxx" value="{{ env.META_ACCESS_TOKEN or '' }}">
+      </div>
+      <div class="form-group">
+        <label>Ad Account ID</label>
+        <input name="META_AD_ACCOUNT_ID" class="input input-dark" placeholder="act_000000000" value="{{ env.META_AD_ACCOUNT_ID or '' }}">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end;">Salvar</button>
+    </form>
+  </div>
+
+  <!-- Google Ads -->
+  <div class="conn-card">
+    <div class="conn-header">
+      <div class="conn-icon" style="background:rgba(234,67,53,0.15);">🔴</div>
+      <div>
+        <div class="conn-name">Google Ads</div>
+        <div class="conn-status {{ 'ok' if env.GOOGLE_ADS_DEVELOPER_TOKEN else 'na' }}">
+          {{ '✓ Conectado' if env.GOOGLE_ADS_DEVELOPER_TOKEN else '○ Não configurado' }}
+        </div>
+      </div>
+    </div>
+    <form class="conn-body" onsubmit="saveEnv(event, 'google')">
+      <div class="form-group">
+        <label>Developer Token</label>
+        <input name="GOOGLE_ADS_DEVELOPER_TOKEN" class="input input-dark" type="password" placeholder="xxxxxxxxxxxxxxxx" value="{{ env.GOOGLE_ADS_DEVELOPER_TOKEN or '' }}">
+      </div>
+      <div class="form-group">
+        <label>Customer ID</label>
+        <input name="GOOGLE_ADS_CUSTOMER_ID" class="input input-dark" placeholder="123-456-7890" value="{{ env.GOOGLE_ADS_CUSTOMER_ID or '' }}">
+      </div>
+      <div class="form-group">
+        <label>Refresh Token</label>
+        <input name="GOOGLE_ADS_REFRESH_TOKEN" class="input input-dark" type="password" placeholder="1//xxxxxxxxxx" value="{{ env.GOOGLE_ADS_REFRESH_TOKEN or '' }}">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end;">Salvar</button>
+    </form>
+  </div>
+
+  <!-- LinkedIn Ads -->
+  <div class="conn-card">
+    <div class="conn-header">
+      <div class="conn-icon" style="background:rgba(0,119,181,0.15);">💼</div>
+      <div>
+        <div class="conn-name">LinkedIn Ads</div>
+        <div class="conn-status {{ 'ok' if env.LINKEDIN_ACCESS_TOKEN else 'na' }}">
+          {{ '✓ Conectado' if env.LINKEDIN_ACCESS_TOKEN else '○ Não configurado' }}
+        </div>
+      </div>
+    </div>
+    <form class="conn-body" onsubmit="saveEnv(event, 'linkedin')">
+      <div class="form-group">
+        <label>Access Token</label>
+        <input name="LINKEDIN_ACCESS_TOKEN" class="input input-dark" type="password" placeholder="AQxxxxxxx" value="{{ env.LINKEDIN_ACCESS_TOKEN or '' }}">
+      </div>
+      <div class="form-group">
+        <label>Ad Account ID</label>
+        <input name="LINKEDIN_AD_ACCOUNT_ID" class="input input-dark" placeholder="000000000" value="{{ env.LINKEDIN_AD_ACCOUNT_ID or '' }}">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end;">Salvar</button>
+    </form>
+  </div>
+
+  <!-- TikTok Ads -->
+  <div class="conn-card">
+    <div class="conn-header">
+      <div class="conn-icon" style="background:rgba(254,44,85,0.15);">🎵</div>
+      <div>
+        <div class="conn-name">TikTok Ads</div>
+        <div class="conn-status {{ 'ok' if env.TIKTOK_ACCESS_TOKEN else 'na' }}">
+          {{ '✓ Conectado' if env.TIKTOK_ACCESS_TOKEN else '○ Não configurado' }}
+        </div>
+      </div>
+    </div>
+    <form class="conn-body" onsubmit="saveEnv(event, 'tiktok')">
+      <div class="form-group">
+        <label>Access Token</label>
+        <input name="TIKTOK_ACCESS_TOKEN" class="input input-dark" type="password" placeholder="xxxxxxxxxxxxxxxx" value="{{ env.TIKTOK_ACCESS_TOKEN or '' }}">
+      </div>
+      <div class="form-group">
+        <label>Ad Account ID</label>
+        <input name="TIKTOK_AD_ACCOUNT_ID" class="input input-dark" placeholder="000000000000" value="{{ env.TIKTOK_AD_ACCOUNT_ID or '' }}">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end;">Salvar</button>
+    </form>
+  </div>
+
+  <!-- HubSpot -->
+  <div class="conn-card">
+    <div class="conn-header">
+      <div class="conn-icon" style="background:rgba(255,122,0,0.15);">🟠</div>
+      <div>
+        <div class="conn-name">HubSpot CRM</div>
+        <div class="conn-status {{ 'ok' if env.HUBSPOT_API_KEY else 'na' }}">
+          {{ '✓ Conectado' if env.HUBSPOT_API_KEY else '○ Não configurado' }}
+        </div>
+      </div>
+    </div>
+    <form class="conn-body" onsubmit="saveEnv(event, 'hubspot')">
+      <div class="form-group">
+        <label>API Key (Private App Token)</label>
+        <input name="HUBSPOT_API_KEY" class="input input-dark" type="password" placeholder="pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="{{ env.HUBSPOT_API_KEY or '' }}">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end;">Salvar</button>
+    </form>
+  </div>
+
+  <!-- Claude API + Slack + DB -->
+  <div class="conn-card">
+    <div class="conn-header">
+      <div class="conn-icon" style="background:rgba(163,255,0,0.1);">🤖</div>
+      <div>
+        <div class="conn-name">IA, Slack & Banco</div>
+        <div class="conn-status {{ 'ok' if env.ANTHROPIC_API_KEY else 'na' }}">
+          {{ '✓ Claude configurado' if env.ANTHROPIC_API_KEY else '○ Incompleto' }}
+        </div>
+      </div>
+    </div>
+    <form class="conn-body" onsubmit="saveEnv(event, 'core')">
+      <div class="form-group">
+        <label>Anthropic API Key</label>
+        <input name="ANTHROPIC_API_KEY" class="input input-dark" type="password" placeholder="sk-ant-xxxxxxxxx" value="{{ env.ANTHROPIC_API_KEY or '' }}">
+      </div>
+      <div class="form-group">
+        <label>Slack Webhook URL</label>
+        <input name="SLACK_WEBHOOK_URL" class="input input-dark" placeholder="https://hooks.slack.com/services/..." value="{{ env.SLACK_WEBHOOK_URL or '' }}">
+      </div>
+      <div class="form-group">
+        <label>Database URL (PostgreSQL)</label>
+        <input name="DATABASE_URL" class="input input-dark" placeholder="postgresql://user:pass@host:5432/dbname" value="{{ env.DATABASE_URL or '' }}">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end;">Salvar</button>
+    </form>
+  </div>
+
+</div>
+
+<div class="panel mt-3">
+  <div class="panel-head"><h3>Ações rápidas</h3></div>
+  <div class="panel-body flex gap-2">
+    <button class="btn btn-outline" onclick="runHealthCheck()">Rodar Health Check</button>
+    <button class="btn btn-ghost" onclick="runPipeline()">Executar Pipeline agora</button>
+    <button class="btn btn-ghost" onclick="createHubSpotProps()">Criar propriedades HubSpot</button>
+  </div>
+  <div id="action-output" style="padding:0 1.5rem 1.5rem;font-family:monospace;font-size:0.8rem;color:var(--muted);white-space:pre-wrap;display:none;"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function runHealthCheck() {
+  const out = document.getElementById('action-output');
+  out.style.display = 'block';
+  out.textContent = 'Executando health check...';
+  const r = await fetch('/api/health-check', {method:'POST'});
+  const d = await r.json();
+  out.textContent = d.output;
+}
+async function runPipeline() {
+  const out = document.getElementById('action-output');
+  out.style.display = 'block';
+  out.textContent = 'Executando pipeline...';
+  const r = await fetch('/api/pipeline/run', {method:'POST'});
+  const d = await r.json();
+  out.textContent = d.message;
+  showToast(d.message);
+}
+async function createHubSpotProps() {
+  const out = document.getElementById('action-output');
+  out.style.display = 'block';
+  out.textContent = 'Criando propriedades no HubSpot...';
+  const r = await fetch('/api/hubspot/create-properties', {method:'POST'});
+  const d = await r.json();
+  out.textContent = JSON.stringify(d, null, 2);
+  showToast(d.message || 'Concluído');
+}
+</script>
+{% endblock %}
