@@ -8,7 +8,7 @@
   <p class="page-desc">Desempenho consolidado dos últimos {{ days }} dias</p>
 </div>
 
-<!-- KPIs -->
+<!-- KPIs de Mídia -->
 <div class="kpi-grid">
   <div class="kpi-card">
     <div class="kpi-label">Total Investido</div>
@@ -31,6 +31,92 @@
     <div class="kpi-sub">Meta: {% if kpis.roas_meta %}{{ kpis.roas_meta }}x{% else %}—{% endif %}</div>
   </div>
 </div>
+
+<!-- KPIs de LTV -->
+<div style="display:flex;align-items:center;justify-content:space-between;margin:1.5rem 0 0.75rem;">
+  <div>
+    <span style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);">Lifetime Value</span>
+  </div>
+  <button class="btn btn-ghost btn-sm" onclick="refreshLtv(this)" style="font-size:0.75rem;">
+    Atualizar do HubSpot
+  </button>
+</div>
+<div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);">
+  <div class="kpi-card">
+    <div class="kpi-label">LTV Médio</div>
+    <div class="kpi-value green">R$ {{ "%.0f"|format(ltv.global.ltv_medio) }}</div>
+    <div class="kpi-sub">impl. + mensalidade × retenção</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">MRR</div>
+    <div class="kpi-value">R$ {{ "%.0f"|format(ltv.global.mrr) }}</div>
+    <div class="kpi-sub">{{ ltv.global.ativos }} clientes ativos</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">ARR</div>
+    <div class="kpi-value">R$ {{ "%.0f"|format(ltv.global.arr) }}</div>
+    <div class="kpi-sub">receita anual recorrente</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Churn Rate</div>
+    <div class="kpi-value {% if ltv.global.churn_rate_pct > 5 %}text-danger{% endif %}">
+      {{ ltv.global.churn_rate_pct }}%
+    </div>
+    <div class="kpi-sub">{{ ltv.global.churned }} churned de {{ ltv.global.total_clientes }}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">LTV / CAC</div>
+    {% set ltv_cac = (ltv.global.ltv_medio / kpis.cpl) if kpis.cpl > 0 else 0 %}
+    <div class="kpi-value {% if ltv_cac >= 3 %}green{% endif %}">
+      {% if ltv_cac > 0 %}{{ "%.1f"|format(ltv_cac) }}x{% else %}—{% endif %}
+    </div>
+    <div class="kpi-sub">meta: &gt; 3x</div>
+  </div>
+</div>
+
+{% if ltv.por_produto %}
+<!-- LTV por Produto -->
+<div class="panel mt-2">
+  <div class="panel-head">
+    <h3>LTV por Produto</h3>
+    {% if ltv.gerado_em %}
+    <span class="text-muted text-sm">atualizado {{ ltv.gerado_em[:10] }}</span>
+    {% endif %}
+  </div>
+  <div style="padding:0;">
+    <table>
+      <thead>
+        <tr>
+          <th>Produto</th>
+          <th>Clientes</th>
+          <th>Ativos</th>
+          <th>Implementação média</th>
+          <th>Mensalidade média</th>
+          <th>Retenção média</th>
+          <th>LTV Médio</th>
+          <th>MRR</th>
+          <th>Churn</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for nome, m in ltv.por_produto.items() %}
+        <tr>
+          <td style="font-weight:600;">{{ nome }}</td>
+          <td>{{ m.total_clientes }}</td>
+          <td>{{ m.ativos }}</td>
+          <td>R$ {{ "%.0f"|format(m.implementacao_media) }}</td>
+          <td>R$ {{ "%.0f"|format(m.mensalidade_media) }}</td>
+          <td>{{ m.meses_retencao_medio }} meses</td>
+          <td class="text-green" style="font-weight:600;">R$ {{ "%.0f"|format(m.ltv_medio) }}</td>
+          <td>R$ {{ "%.0f"|format(m.mrr) }}</td>
+          <td class="{% if m.churn_rate_pct > 5 %}text-danger{% endif %}">{{ m.churn_rate_pct }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 
 <div class="grid-2">
   <!-- Desempenho por canal -->
@@ -131,4 +217,27 @@
     </table>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+.text-danger { color: #ff5050; }
+</style>
+<script>
+async function refreshLtv(btn) {
+  const orig = btn.textContent;
+  btn.textContent = 'Calculando...';
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/ltv/refresh', { method: 'POST' });
+    const d = await r.json();
+    showToast(d.message || 'LTV atualizado');
+    setTimeout(() => location.reload(), 1200);
+  } catch(e) {
+    showToast('Erro ao atualizar LTV');
+    btn.textContent = orig;
+    btn.disabled = false;
+  }
+}
+</script>
 {% endblock %}

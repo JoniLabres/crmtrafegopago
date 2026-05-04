@@ -32,6 +32,7 @@ THRESHOLDS_PATH = ROOT / "config" / "alert_thresholds.json"
 TAXONOMY_PATH   = ROOT / "config" / "utm_taxonomy.json"
 PRODUCTS_PATH   = ROOT / "config" / "products.json"
 ACCOUNTS_PATH   = ROOT / "config" / "accounts.json"
+LTV_PATH        = ROOT / "config" / "ltv_metrics.json"
 
 _agent_instance = None
 _active_product = None
@@ -56,6 +57,22 @@ def _load_accounts() -> list:
         return []
     with open(ACCOUNTS_PATH, encoding="utf-8") as f:
         return json.load(f).get("produtos", [])
+
+
+def _load_ltv() -> dict:
+    _empty = {
+        "global": {"ltv_medio": 0, "mrr": 0, "arr": 0, "total_clientes": 0,
+                   "ativos": 0, "churned": 0, "churn_rate_pct": 0},
+        "por_produto": {},
+        "gerado_em": None,
+    }
+    if not LTV_PATH.exists():
+        return _empty
+    try:
+        with open(LTV_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return _empty
 
 
 def _load_taxonomy():
@@ -150,9 +167,11 @@ def _get_alert_count():
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     data = _get_dashboard_data(30)
+    ltv = _load_ltv()
     return templates.TemplateResponse("dashboard.html", {
         "request": request, "page": "dashboard", "days": 30,
         "active_product": _active_product, "alert_count": _get_alert_count(),
+        "ltv": ltv,
         **data,
     })
 
@@ -400,6 +419,30 @@ async def hs_import_products():
     except Exception as e:
         logger.error("Import products error: %s", e)
         return JSONResponse({"message": f"Erro: {e}"}, status_code=500)
+
+@app.post("/api/ltv/refresh")
+async def ltv_refresh():
+    try:
+        sys.path.insert(0, str(ROOT / "hubspot"))
+        from ltv_calculator import run as run_ltv
+        metrics = run_ltv()
+        g = metrics["global"]
+        return {
+            "message": (
+                f"LTV calculado — Médio: R$ {g['ltv_medio']:,.2f} | "
+                f"MRR: R$ {g['mrr']:,.2f} | "
+                f"Clientes: {g['total_clientes']} ({g['ativos']} ativos)"
+            ),
+            "global": g,
+            "por_produto": metrics["por_produto"],
+        }
+    except Exception as e:
+        logger.error("LTV refresh error: %s", e)
+        return JSONResponse({"message": f"Erro: {e}"}, status_code=500)
+
+@app.get("/api/ltv/data")
+async def ltv_data():
+    return _load_ltv()
 
 
 @app.post("/api/accounts/save")

@@ -121,6 +121,38 @@ DEAL_PROPERTIES = [
         "groupName": "dealinformation",
         "description": "Custo de aquisição por canal (spend / deals_count)",
     },
+    {
+        "name": "valor_implementacao",
+        "label": "Valor de Implementação",
+        "type": "number",
+        "fieldType": "number",
+        "groupName": "dealinformation",
+        "description": "Valor único cobrado na implementação/onboarding do produto",
+    },
+    {
+        "name": "mensalidade",
+        "label": "Mensalidade",
+        "type": "number",
+        "fieldType": "number",
+        "groupName": "dealinformation",
+        "description": "Valor mensal recorrente do contrato (MRR por cliente)",
+    },
+    {
+        "name": "data_churn",
+        "label": "Data de Churn",
+        "type": "date",
+        "fieldType": "date",
+        "groupName": "dealinformation",
+        "description": "Data em que o cliente cancelou (vazio = cliente ativo)",
+    },
+    {
+        "name": "ltv_calculado",
+        "label": "LTV Calculado",
+        "type": "number",
+        "fieldType": "number",
+        "groupName": "dealinformation",
+        "description": "LTV = Implementação + (Mensalidade × Meses de Retenção) — calculado pelo IXCTraffic",
+    },
 ]
 
 
