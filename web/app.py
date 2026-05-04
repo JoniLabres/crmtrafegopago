@@ -90,42 +90,49 @@ def _list_products():
         return [p["nome"] for p in json.load(f)["produtos"]]
 
 
-def _get_dashboard_data(days: int = 30):
+def _get_dashboard_data(days: int = 30, produto: str = ""):
     try:
         import psycopg2
         conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+
+        # Build optional produto filter fragment
+        p_filter = "AND produto = %s" if produto else ""
+
         with conn.cursor() as cur:
-            cur.execute("""
+            params_base = (days, produto) if produto else (days,)
+
+            cur.execute(f"""
                 SELECT COALESCE(SUM(spend),0), COALESCE(SUM(leads),0),
                        COALESCE(SUM(revenue),0), COALESCE(COUNT(DISTINCT channel),0),
                        COALESCE(AVG(roas),0)
-                FROM campaigns_daily WHERE date >= CURRENT_DATE - %s
-            """, (days,))
+                FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
+            """, params_base)
             spend, leads, revenue, channels, roas = cur.fetchone()
 
-            cur.execute("""
+            cur.execute(f"""
                 SELECT channel, ROUND(SUM(spend)::numeric,2) AS spend, SUM(leads) AS leads,
                        ROUND(AVG(roas)::numeric,2) AS roas,
                        ROUND(AVG(NULLIF(cpl,0))::numeric,2) AS cpl
-                FROM campaigns_daily WHERE date >= CURRENT_DATE - %s
+                FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
                 GROUP BY channel ORDER BY spend DESC
-            """, (days,))
+            """, params_base)
             cols = [d[0] for d in cur.description]
             by_channel = [dict(zip(cols, r)) for r in cur.fetchall()]
 
-            cur.execute("""
+            cur.execute(f"""
                 SELECT campaign_utm, channel, produto,
                        ROUND(SUM(spend)::numeric,2) AS spend, SUM(leads) AS leads,
                        ROUND(SUM(revenue)::numeric,2) AS revenue,
                        ROUND(AVG(roas)::numeric,2) AS roas,
                        ROUND(AVG(NULLIF(cpl,0))::numeric,2) AS cpl
-                FROM campaigns_daily WHERE date >= CURRENT_DATE - %s
+                FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
                 GROUP BY campaign_utm, channel, produto
                 ORDER BY roas DESC LIMIT 10
-            """, (days,))
+            """, params_base)
             cols = [d[0] for d in cur.description]
             top_campaigns = [dict(zip(cols, r)) for r in cur.fetchall()]
 
+            # Alerts are not filtered by product (show all)
             cur.execute("""
                 SELECT alert_type, severity, message, sent_at::text, campaign_utm
                 FROM alerts_log WHERE sent_at >= NOW() - INTERVAL '48 hours'
@@ -133,6 +140,7 @@ def _get_dashboard_data(days: int = 30):
             """)
             cols = [d[0] for d in cur.description]
             alerts = [dict(zip(cols, r)) for r in cur.fetchall()]
+
         conn.close()
         cpl = round(spend / leads, 2) if leads else 0
         return {
@@ -166,12 +174,47 @@ def _get_alert_count():
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    data = _get_dashboard_data(30)
-    ltv = _load_ltv()
+    params = request.query_params
+    try:
+        days = int(params.get("days", 30))
+        days = max(7, min(days, 365))
+    except ValueError:
+        days = 30
+    produto = params.get("produto", "").strip()
+
+    data = _get_dashboard_data(days, produto)
+    ltv_all = _load_ltv()
+
+    # Filter LTV metrics to selected product
+    if produto and produto in ltv_all.get("por_produto", {}):
+        p = ltv_all["por_produto"][produto]
+        ltv_filtered = {
+            "global": {
+                "ltv_medio": p["ltv_medio"],
+                "mrr": p["mrr"],
+                "arr": p["arr"],
+                "total_clientes": p["total_clientes"],
+                "ativos": p["ativos"],
+                "churned": p["churned"],
+                "churn_rate_pct": p["churn_rate_pct"],
+            },
+            "por_produto": {produto: p},
+            "gerado_em": ltv_all.get("gerado_em"),
+        }
+    else:
+        ltv_filtered = ltv_all
+
+    try:
+        produtos = _list_products()
+    except Exception:
+        produtos = []
+
     return templates.TemplateResponse("dashboard.html", {
-        "request": request, "page": "dashboard", "days": 30,
+        "request": request, "page": "dashboard", "days": days,
+        "produto_filtro": produto,
+        "produtos": produtos,
         "active_product": _active_product, "alert_count": _get_alert_count(),
-        "ltv": ltv,
+        "ltv": ltv_filtered,
         **data,
     })
 
