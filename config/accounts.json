@@ -1,0 +1,27 @@
+{
+  "_comentario": "Mapeamento de produto → contas de anúncios por canal. Adicione uma entrada por produto.",
+  "produtos": [
+    {
+      "nome": "produto-a",
+      "contas": {
+        "meta": {
+          "ad_account_id": "",
+          "access_token_env": "META_ACCESS_TOKEN"
+        },
+        "google": {
+          "customer_id": "",
+          "developer_token_env": "GOOGLE_ADS_DEVELOPER_TOKEN",
+          "refresh_token_env": "GOOGLE_ADS_REFRESH_TOKEN"
+        },
+        "linkedin": {
+          "ad_account_id": "",
+          "access_token_env": "LINKEDIN_ACCESS_TOKEN"
+        },
+        "tiktok": {
+          "ad_account_id": "",
+          "access_token_env": "TIKTOK_ACCESS_TOKEN"
+        }
+      }
+    }
+  ]
+}

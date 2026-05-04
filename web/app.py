@@ -22,7 +22,7 @@ load_dotenv(ROOT / ".env")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="CRM Tráfego Pago", docs_url=None, redoc_url=None)
+app = FastAPI(title="IXCTraffic", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
@@ -30,6 +30,7 @@ ENV_PATH = ROOT / ".env"
 THRESHOLDS_PATH = ROOT / "config" / "alert_thresholds.json"
 TAXONOMY_PATH   = ROOT / "config" / "utm_taxonomy.json"
 PRODUCTS_PATH   = ROOT / "config" / "products.json"
+ACCOUNTS_PATH   = ROOT / "config" / "accounts.json"
 
 _agent_instance = None
 _active_product = None
@@ -37,13 +38,21 @@ _active_product = None
 
 def _get_env() -> dict:
     keys = [
-        "META_ACCESS_TOKEN","META_AD_ACCOUNT_ID",
+        "META_ACCESS_TOKEN","META_AD_ACCOUNT_ID","META_PIXEL_ID",
         "GOOGLE_ADS_DEVELOPER_TOKEN","GOOGLE_ADS_CUSTOMER_ID","GOOGLE_ADS_REFRESH_TOKEN",
-        "LINKEDIN_ACCESS_TOKEN","LINKEDIN_AD_ACCOUNT_ID",
-        "TIKTOK_ACCESS_TOKEN","TIKTOK_AD_ACCOUNT_ID",
+        "GOOGLE_ADS_CLIENT_ID","GOOGLE_ADS_CLIENT_SECRET",
+        "LINKEDIN_ACCESS_TOKEN","LINKEDIN_AD_ACCOUNT_ID","LINKEDIN_PARTNER_ID",
+        "TIKTOK_ACCESS_TOKEN","TIKTOK_AD_ACCOUNT_ID","TIKTOK_PIXEL_ID",
         "HUBSPOT_API_KEY","ANTHROPIC_API_KEY","SLACK_WEBHOOK_URL","DATABASE_URL",
     ]
     return {k: os.getenv(k, "") for k in keys}
+
+
+def _load_accounts() -> list:
+    if not ACCOUNTS_PATH.exists():
+        return []
+    with open(ACCOUNTS_PATH, encoding="utf-8") as f:
+        return json.load(f).get("produtos", [])
 
 
 def _load_taxonomy():
@@ -148,7 +157,8 @@ async def dashboard(request: Request):
 async def conexoes(request: Request):
     return templates.TemplateResponse("conexoes.html", {
         "request": request, "page": "conexoes",
-        "env": _get_env(), "active_product": _active_product, "alert_count": _get_alert_count(),
+        "env": _get_env(), "accounts": _load_accounts(),
+        "active_product": _active_product, "alert_count": _get_alert_count(),
     })
 
 @app.get("/campanhas", response_class=HTMLResponse)
@@ -372,6 +382,55 @@ async def hs_create_props():
         return {"message": "Propriedades criadas", "contacts": contacts, "deals": deals}
     except Exception as e:
         return JSONResponse({"message": f"Erro: {e}"}, status_code=500)
+
+@app.post("/api/hubspot/import-products")
+async def hs_import_products():
+    try:
+        sys.path.insert(0, str(ROOT / "hubspot"))
+        from import_products import import_products
+        result = import_products()
+        return {
+            "message": f"Importados {result['importados']} produto(s) do HubSpot. Total: {len(result['produtos'])}",
+            "importados": result["importados"],
+            "produtos": result["produtos"],
+        }
+    except Exception as e:
+        logger.error("Import products error: %s", e)
+        return JSONResponse({"message": f"Erro: {e}"}, status_code=500)
+
+
+@app.post("/api/accounts/save")
+async def accounts_save(request: Request):
+    data = await request.json()
+    nome = data.get("nome", "").strip()
+    if not nome:
+        return JSONResponse({"message": "Nome do produto é obrigatório"}, status_code=400)
+    accounts = _load_accounts()
+    existing = next((p for p in accounts if p["nome"] == nome), None)
+    if existing:
+        existing["contas"] = data.get("contas", existing.get("contas", {}))
+    else:
+        accounts.append({"nome": nome, "contas": data.get("contas", {
+            "meta": {"ad_account_id": ""},
+            "google": {"customer_id": ""},
+            "linkedin": {"ad_account_id": ""},
+            "tiktok": {"ad_account_id": ""},
+        })})
+    ACCOUNTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(ACCOUNTS_PATH, "w", encoding="utf-8") as f:
+        json.dump({"produtos": accounts}, f, indent=2, ensure_ascii=False)
+    return {"message": f"Contas de '{nome}' salvas"}
+
+
+@app.post("/api/accounts/remove")
+async def accounts_remove(request: Request):
+    data = await request.json()
+    nome = data.get("nome", "").strip()
+    accounts = _load_accounts()
+    accounts = [p for p in accounts if p["nome"] != nome]
+    with open(ACCOUNTS_PATH, "w", encoding="utf-8") as f:
+        json.dump({"produtos": accounts}, f, indent=2, ensure_ascii=False)
+    return {"message": f"Produto '{nome}' removido"}
 
 @app.post("/api/health-check")
 async def health_check():
