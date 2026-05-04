@@ -5,14 +5,18 @@ import logging
 from pathlib import Path
 from datetime import datetime
 
+# Ensure web/ is on sys.path before importing local modules
+sys.path.insert(0, str(Path(__file__).parent))
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from dotenv import load_dotenv, set_key
 
+import config_store
+
 ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(Path(__file__).parent))  # web/ — oauth_flows, etc.
 sys.path.insert(0, str(ROOT / "tracking"))
 sys.path.insert(0, str(ROOT / "data_pipeline"))
 sys.path.insert(0, str(ROOT / "dashboard"))
@@ -53,10 +57,8 @@ def _get_env() -> dict:
 
 
 def _load_accounts() -> list:
-    if not ACCOUNTS_PATH.exists():
-        return []
-    with open(ACCOUNTS_PATH, encoding="utf-8") as f:
-        return json.load(f).get("produtos", [])
+    data = config_store.load("accounts", ACCOUNTS_PATH, {"produtos": []})
+    return data.get("produtos", []) if isinstance(data, dict) else []
 
 
 def _load_ltv() -> dict:
@@ -66,13 +68,8 @@ def _load_ltv() -> dict:
         "por_produto": {},
         "gerado_em": None,
     }
-    if not LTV_PATH.exists():
-        return _empty
-    try:
-        with open(LTV_PATH, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return _empty
+    data = config_store.load("ltv_metrics", LTV_PATH, _empty)
+    return data if isinstance(data, dict) else _empty
 
 
 def _load_taxonomy():
@@ -81,13 +78,15 @@ def _load_taxonomy():
 
 
 def _load_thresholds():
-    with open(THRESHOLDS_PATH, encoding="utf-8") as f:
-        return json.load(f)["produtos"]
+    data = config_store.load("thresholds", THRESHOLDS_PATH, {"produtos": {}})
+    return data.get("produtos", {}) if isinstance(data, dict) else {}
 
 
-def _list_products():
-    with open(PRODUCTS_PATH, encoding="utf-8") as f:
-        return [p["nome"] for p in json.load(f)["produtos"]]
+def _list_products() -> list[str]:
+    data = config_store.load("products", PRODUCTS_PATH, {"produtos": []})
+    if isinstance(data, dict):
+        return [p["nome"] for p in data.get("produtos", [])]
+    return []
 
 
 def _get_dashboard_data(days: int = 30, produto: str = ""):
@@ -301,15 +300,23 @@ async def utm_page(request: Request):
 @app.post("/api/env/save")
 async def env_save(request: Request):
     data = await request.json()
-    env_path = str(ENV_PATH)
-    if not ENV_PATH.exists():
-        ENV_PATH.write_text("")
+    saved = 0
     for key, value in data.items():
-        if value:
-            set_key(env_path, key, value)
-            os.environ[key] = value
-    load_dotenv(ENV_PATH, override=True)
-    return {"message": f"{len(data)} variável(is) salva(s) no .env"}
+        if not value:
+            continue
+        os.environ[key] = value
+        saved += 1
+        if not config_store.IS_VERCEL:
+            try:
+                if not ENV_PATH.exists():
+                    ENV_PATH.write_text("")
+                set_key(str(ENV_PATH), key, value)
+            except Exception:
+                pass
+    if not config_store.IS_VERCEL:
+        load_dotenv(ENV_PATH, override=True)
+    suffix = " (adicione também no painel do Vercel para persistir)" if config_store.IS_VERCEL else " no .env"
+    return {"message": f"{saved} variável(is) salva(s){suffix}"}
 
 
 # ── API: UTM ──────────────────────────────────────────────────────────────────
@@ -419,9 +426,7 @@ async def alerts_check():
 @app.post("/api/alerts/thresholds")
 async def alerts_thresholds(request: Request):
     data = await request.json()
-    thresholds = {"produtos": data}
-    with open(THRESHOLDS_PATH, "w", encoding="utf-8") as f:
-        json.dump(thresholds, f, indent=2, ensure_ascii=False)
+    config_store.save("thresholds", {"produtos": data}, THRESHOLDS_PATH)
     return {"message": "Thresholds salvos"}
 
 
@@ -454,6 +459,15 @@ async def hs_import_products():
         sys.path.insert(0, str(ROOT / "hubspot"))
         from import_products import import_products
         result = import_products()
+        # Persist the products list via config_store (works on Vercel)
+        if result.get("produtos"):
+            existing = config_store.load("products", PRODUCTS_PATH, {"produtos": []})
+            existing_map = {p["nome"]: p for p in existing.get("produtos", [])}
+            # import_products already wrote to PRODUCTS_PATH on disk; also push to DB
+            if PRODUCTS_PATH.exists():
+                with open(PRODUCTS_PATH, encoding="utf-8") as f:
+                    products_data = json.load(f)
+                config_store.save("products", products_data, None)  # DB only (file already written)
         return {
             "message": f"Importados {result['importados']} produto(s) do HubSpot. Total: {len(result['produtos'])}",
             "importados": result["importados"],
@@ -469,6 +483,7 @@ async def ltv_refresh():
         sys.path.insert(0, str(ROOT / "hubspot"))
         from ltv_calculator import run as run_ltv
         metrics = run_ltv()
+        config_store.save("ltv_metrics", metrics, LTV_PATH)
         g = metrics["global"]
         return {
             "message": (
@@ -505,9 +520,7 @@ async def accounts_save(request: Request):
             "linkedin": {"ad_account_id": ""},
             "tiktok": {"ad_account_id": ""},
         })})
-    ACCOUNTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(ACCOUNTS_PATH, "w", encoding="utf-8") as f:
-        json.dump({"produtos": accounts}, f, indent=2, ensure_ascii=False)
+    config_store.save("accounts", {"produtos": accounts}, ACCOUNTS_PATH)
     return {"message": f"Contas de '{nome}' salvas"}
 
 
@@ -515,10 +528,8 @@ async def accounts_save(request: Request):
 async def accounts_remove(request: Request):
     data = await request.json()
     nome = data.get("nome", "").strip()
-    accounts = _load_accounts()
-    accounts = [p for p in accounts if p["nome"] != nome]
-    with open(ACCOUNTS_PATH, "w", encoding="utf-8") as f:
-        json.dump({"produtos": accounts}, f, indent=2, ensure_ascii=False)
+    accounts = [p for p in _load_accounts() if p["nome"] != nome]
+    config_store.save("accounts", {"produtos": accounts}, ACCOUNTS_PATH)
     return {"message": f"Produto '{nome}' removido"}
 
 @app.post("/api/health-check")
@@ -688,9 +699,12 @@ async def auth_select(request: Request):
 
 
 def _save_env_token(key: str, value: str):
-    env_path = str(ENV_PATH)
-    if not ENV_PATH.exists():
-        ENV_PATH.write_text("")
-    set_key(env_path, key, value)
     os.environ[key] = value
-    load_dotenv(ENV_PATH, override=True)
+    if not config_store.IS_VERCEL:
+        try:
+            if not ENV_PATH.exists():
+                ENV_PATH.write_text("")
+            set_key(str(ENV_PATH), key, value)
+            load_dotenv(ENV_PATH, override=True)
+        except Exception:
+            pass

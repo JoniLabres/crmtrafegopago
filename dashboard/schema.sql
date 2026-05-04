@@ -43,3 +43,13 @@ CREATE TABLE IF NOT EXISTS alerts_log (
 CREATE INDEX IF NOT EXISTS idx_alerts_type     ON alerts_log (alert_type);
 CREATE INDEX IF NOT EXISTS idx_alerts_sent_at  ON alerts_log (sent_at);
 CREATE INDEX IF NOT EXISTS idx_alerts_severity ON alerts_log (severity);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Config store: replaces local JSON files on Vercel (read-only filesystem)
+-- Keys: accounts, products, thresholds, ltv_metrics
+
+CREATE TABLE IF NOT EXISTS ixc_config (
+    key        TEXT PRIMARY KEY,
+    value      JSONB NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
