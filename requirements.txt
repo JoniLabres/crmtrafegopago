@@ -21,7 +21,7 @@ google-auth==2.30.0
 google-ads==24.1.0
 facebook-business==19.0.0
 linkedin-api==2.1.0
-tiktok-business-api-sdk==0.1.0
+tiktok-business-api-sdk==1.0.1
 
 # IA e comunicação
 anthropic==0.34.0
