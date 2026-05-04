@@ -6,12 +6,13 @@ from pathlib import Path
 from datetime import datetime
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from dotenv import load_dotenv, set_key
 
 ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(Path(__file__).parent))  # web/ — oauth_flows, etc.
 sys.path.insert(0, str(ROOT / "tracking"))
 sys.path.insert(0, str(ROOT / "data_pipeline"))
 sys.path.insert(0, str(ROOT / "dashboard"))
@@ -38,12 +39,14 @@ _active_product = None
 
 def _get_env() -> dict:
     keys = [
-        "META_ACCESS_TOKEN","META_AD_ACCOUNT_ID","META_PIXEL_ID",
-        "GOOGLE_ADS_DEVELOPER_TOKEN","GOOGLE_ADS_CUSTOMER_ID","GOOGLE_ADS_REFRESH_TOKEN",
+        "META_CLIENT_ID","META_CLIENT_SECRET","META_ACCESS_TOKEN","META_AD_ACCOUNT_ID","META_PIXEL_ID",
         "GOOGLE_ADS_CLIENT_ID","GOOGLE_ADS_CLIENT_SECRET",
+        "GOOGLE_ADS_DEVELOPER_TOKEN","GOOGLE_ADS_CUSTOMER_ID","GOOGLE_ADS_REFRESH_TOKEN",
+        "LINKEDIN_CLIENT_ID","LINKEDIN_CLIENT_SECRET",
         "LINKEDIN_ACCESS_TOKEN","LINKEDIN_AD_ACCOUNT_ID","LINKEDIN_PARTNER_ID",
+        "TIKTOK_CLIENT_ID","TIKTOK_CLIENT_SECRET",
         "TIKTOK_ACCESS_TOKEN","TIKTOK_AD_ACCOUNT_ID","TIKTOK_PIXEL_ID",
-        "HUBSPOT_API_KEY","ANTHROPIC_API_KEY","SLACK_WEBHOOK_URL","DATABASE_URL",
+        "HUBSPOT_API_KEY","ANTHROPIC_API_KEY","SLACK_WEBHOOK_URL","DATABASE_URL","APP_BASE_URL",
     ]
     return {k: os.getenv(k, "") for k in keys}
 
@@ -450,3 +453,158 @@ async def health_check():
         status = "OK" if val else "NÃO CONFIGURADO"
         lines.append(f"  {status:20s} {name}")
     return {"output": "\n".join(lines)}
+
+
+# ── OAuth: Connect & Callback ─────────────────────────────────────────────────
+
+_CHANNEL_NAMES = {
+    "meta": "Meta Ads",
+    "google": "Google Ads",
+    "linkedin": "LinkedIn Ads",
+    "tiktok": "TikTok Ads",
+}
+
+_CHANNEL_CLIENT_ID_VARS = {
+    "meta": "META_CLIENT_ID",
+    "google": "GOOGLE_ADS_CLIENT_ID",
+    "linkedin": "LINKEDIN_CLIENT_ID",
+    "tiktok": "TIKTOK_CLIENT_ID",
+}
+
+
+def _base_url(request: Request) -> str:
+    configured = os.getenv("APP_BASE_URL", "").rstrip("/")
+    if configured:
+        return configured
+    return str(request.base_url).rstrip("/")
+
+
+@app.get("/auth/connect/{channel}")
+async def auth_connect(channel: str, request: Request):
+    from oauth_flows import meta_auth_url, google_auth_url, linkedin_auth_url, tiktok_auth_url
+
+    client_id_var = _CHANNEL_CLIENT_ID_VARS.get(channel)
+    if not client_id_var or not os.getenv(client_id_var):
+        return templates.TemplateResponse("oauth_accounts.html", {
+            "request": request, "channel": channel,
+            "channel_name": _CHANNEL_NAMES.get(channel, channel),
+            "accounts": [],
+            "error": f"Configure {client_id_var} no .env antes de conectar.",
+            "active_product": _active_product, "alert_count": _get_alert_count(),
+        }, status_code=400)
+
+    base = _base_url(request)
+    builders = {
+        "meta": meta_auth_url,
+        "google": google_auth_url,
+        "linkedin": linkedin_auth_url,
+        "tiktok": tiktok_auth_url,
+    }
+    url, _ = builders[channel](base)
+    return RedirectResponse(url)
+
+
+@app.get("/auth/callback/{channel}")
+async def auth_callback(channel: str, request: Request):
+    from oauth_flows import (
+        verify_state,
+        meta_exchange, meta_list_accounts,
+        google_exchange, google_list_accounts,
+        linkedin_exchange, linkedin_list_accounts,
+        tiktok_exchange, tiktok_list_accounts,
+    )
+
+    params = dict(request.query_params)
+    state = params.get("state", "")
+    code = params.get("code", "")
+    error = params.get("error", params.get("error_description", ""))
+    channel_name = _CHANNEL_NAMES.get(channel, channel)
+
+    if error:
+        return templates.TemplateResponse("oauth_accounts.html", {
+            "request": request, "channel": channel, "channel_name": channel_name,
+            "accounts": [], "error": error,
+            "active_product": _active_product, "alert_count": _get_alert_count(),
+        })
+
+    if not verify_state(state, channel):
+        return templates.TemplateResponse("oauth_accounts.html", {
+            "request": request, "channel": channel, "channel_name": channel_name,
+            "accounts": [], "error": "State inválido. Tente conectar novamente.",
+            "active_product": _active_product, "alert_count": _get_alert_count(),
+        }, status_code=400)
+
+    base = _base_url(request)
+    try:
+        if channel == "meta":
+            token_data = await meta_exchange(code, base)
+            access_token = token_data["access_token"]
+            _save_env_token("META_ACCESS_TOKEN", access_token)
+            accounts = await meta_list_accounts(access_token)
+            accounts = [{"id": a["id"], "name": a.get("name", a["id"])} for a in accounts]
+
+        elif channel == "google":
+            token_data = await google_exchange(code, base)
+            refresh_token = token_data.get("refresh_token", "")
+            if refresh_token:
+                _save_env_token("GOOGLE_ADS_REFRESH_TOKEN", refresh_token)
+            accounts = await google_list_accounts(refresh_token) if refresh_token else []
+
+        elif channel == "linkedin":
+            token_data = await linkedin_exchange(code, base)
+            access_token = token_data.get("access_token", "")
+            _save_env_token("LINKEDIN_ACCESS_TOKEN", access_token)
+            accounts = await linkedin_list_accounts(access_token)
+
+        elif channel == "tiktok":
+            token_data = await tiktok_exchange(code, base)
+            access_token = token_data.get("access_token", "")
+            _save_env_token("TIKTOK_ACCESS_TOKEN", access_token)
+            accounts = await tiktok_list_accounts(access_token)
+
+        else:
+            raise ValueError(f"Canal desconhecido: {channel}")
+
+    except Exception as exc:
+        logger.error("OAuth callback error [%s]: %s", channel, exc)
+        return templates.TemplateResponse("oauth_accounts.html", {
+            "request": request, "channel": channel, "channel_name": channel_name,
+            "accounts": [], "error": str(exc),
+            "active_product": _active_product, "alert_count": _get_alert_count(),
+        })
+
+    return templates.TemplateResponse("oauth_accounts.html", {
+        "request": request, "channel": channel, "channel_name": channel_name,
+        "accounts": accounts, "error": None,
+        "active_product": _active_product, "alert_count": _get_alert_count(),
+    })
+
+
+@app.post("/auth/select")
+async def auth_select(request: Request):
+    form = await request.form()
+    channel = form.get("channel", "")
+    account_id = str(form.get("account_id", ""))
+    account_name = str(form.get("account_name", account_id))
+
+    id_vars = {
+        "meta": "META_AD_ACCOUNT_ID",
+        "google": "GOOGLE_ADS_CUSTOMER_ID",
+        "linkedin": "LINKEDIN_AD_ACCOUNT_ID",
+        "tiktok": "TIKTOK_AD_ACCOUNT_ID",
+    }
+    env_key = id_vars.get(channel)
+    if env_key and account_id:
+        _save_env_token(env_key, account_id)
+
+    logger.info("OAuth account selected [%s]: %s (%s)", channel, account_id, account_name)
+    return RedirectResponse("/conexoes?oauth=ok&channel=" + channel, status_code=303)
+
+
+def _save_env_token(key: str, value: str):
+    env_path = str(ENV_PATH)
+    if not ENV_PATH.exists():
+        ENV_PATH.write_text("")
+    set_key(env_path, key, value)
+    os.environ[key] = value
+    load_dotenv(ENV_PATH, override=True)
