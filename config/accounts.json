@@ -1,5 +1,4 @@
 {
-  "_comentario": "Mapeamento de produto → contas de anúncios por canal. Adicione uma entrada por produto.",
   "produtos": [
     {
       "nome": "produto-a",
