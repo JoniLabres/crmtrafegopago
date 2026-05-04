@@ -55,7 +55,7 @@ O `utm_campaign` é a chave que une gasto de mídia (APIs dos canais) com receit
 ## Taxonomia de UTM (IMUTÁVEL)
 
 ```
-utm_source   → meta | google | linkedin | tiktok | programatica
+utm_source   → meta | facebook | google | linkedin | tiktok | programatica
 utm_medium   → paid_social | paid_search | display | video | native
 utm_campaign → [produto]_[funil]_[objetivo]_[ano-mes]
 utm_content  → [tipo]_[angulo]_[variacao]

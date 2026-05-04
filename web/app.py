@@ -52,6 +52,8 @@ def _get_env() -> dict:
         "TIKTOK_CLIENT_ID","TIKTOK_CLIENT_SECRET",
         "TIKTOK_ACCESS_TOKEN","TIKTOK_AD_ACCOUNT_ID","TIKTOK_PIXEL_ID",
         "HUBSPOT_API_KEY","ANTHROPIC_API_KEY","SLACK_WEBHOOK_URL","DATABASE_URL","APP_BASE_URL",
+        "GA4_MEASUREMENT_ID","GA4_PROPERTY_ID","GA4_API_SECRET","GA4_CREDENTIALS_JSON",
+        "GTM_ACCOUNT_ID","GTM_CONTAINER_ID","GTM_PUBLIC_ID","GTM_CREDENTIALS_JSON",
     ]
     return {k: os.getenv(k, "") for k in keys}
 
@@ -696,6 +698,80 @@ async def auth_select(request: Request):
 
     logger.info("OAuth account selected [%s]: %s (%s)", channel, account_id, account_name)
     return RedirectResponse("/conexoes?oauth=ok&channel=" + channel, status_code=303)
+
+
+# ── API: GA4 ──────────────────────────────────────────────────────────────────
+
+@app.get("/api/ga4/report")
+async def ga4_report(request: Request):
+    try:
+        sys.path.insert(0, str(ROOT / "data_pipeline"))
+        from ga4_pull import fetch_report
+        params = request.query_params
+        days = int(params.get("days", 30))
+        produto = params.get("produto", "").strip() or None
+        report = fetch_report(days=days, produto=produto)
+        return report
+    except EnvironmentError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        logger.error("GA4 report error: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/ga4/event")
+async def ga4_event(request: Request):
+    try:
+        sys.path.insert(0, str(ROOT / "data_pipeline"))
+        from ga4_pull import send_event
+        d = await request.json()
+        ok = send_event(d.get("event_name", ""), d.get("params", {}), d.get("client_id", "server"))
+        return {"ok": ok}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ── API: GTM ──────────────────────────────────────────────────────────────────
+
+@app.get("/api/gtm/verify")
+async def gtm_verify():
+    try:
+        sys.path.insert(0, str(ROOT / "tracking"))
+        from gtm_integration import verify_setup
+        result = verify_setup()
+        return result
+    except EnvironmentError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        logger.error("GTM verify error: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/gtm/snippet")
+async def gtm_snippet():
+    try:
+        sys.path.insert(0, str(ROOT / "tracking"))
+        from gtm_integration import get_snippet
+        snippet = get_snippet()
+        return {"snippet": snippet}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/gtm/publish")
+async def gtm_publish(request: Request):
+    try:
+        sys.path.insert(0, str(ROOT / "tracking"))
+        from gtm_integration import publish_workspace
+        d = await request.json()
+        note = d.get("note", "Publicado via IXCTraffic")
+        result = publish_workspace(note=note)
+        return result
+    except EnvironmentError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        logger.error("GTM publish error: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 def _save_env_token(key: str, value: str):

@@ -11,6 +11,7 @@
 <!-- Tabs -->
 <div class="tabs" style="margin-bottom:1.5rem;">
   <button class="tab-btn active" onclick="switchTab('credenciais', this)">Credenciais Globais</button>
+  <button class="tab-btn" onclick="switchTab('rastreamento', this)">Rastreamento</button>
   <button class="tab-btn" onclick="switchTab('contas', this)">Contas por Produto <span class="tab-badge">{{ accounts|length if accounts else 0 }}</span></button>
   <button class="tab-btn" onclick="switchTab('acoes', this)">Ações</button>
 </div>
@@ -255,6 +256,105 @@
   </div>
 </div>
 
+<!-- ── Tab: Rastreamento (GA4 + GTM) ──────────────────────────────────────── -->
+<div id="tab-rastreamento" class="tab-panel" style="display:none;">
+
+  <!-- Status -->
+  <div class="kpi-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:1.5rem;max-width:600px;">
+    <div class="kpi-card">
+      <div class="kpi-label">Google Analytics 4</div>
+      <div class="kpi-value" style="font-size:1.1rem;color:{{ 'var(--primary)' if env.GA4_MEASUREMENT_ID else 'var(--muted)' }}">
+        {{ '● Configurado' if env.GA4_MEASUREMENT_ID else '○ Pendente' }}
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Google Tag Manager</div>
+      <div class="kpi-value" style="font-size:1.1rem;color:{{ 'var(--primary)' if env.GTM_ACCOUNT_ID else 'var(--muted)' }}">
+        {{ '● Configurado' if env.GTM_ACCOUNT_ID else '○ Pendente' }}
+      </div>
+    </div>
+  </div>
+
+  <div class="conn-grid">
+
+    <!-- Google Analytics 4 -->
+    <div class="conn-card">
+      <div class="conn-header">
+        <div class="conn-icon" style="background:rgba(249,171,0,0.15);">📊</div>
+        <div>
+          <div class="conn-name">Google Analytics 4</div>
+          <div class="conn-status {{ 'ok' if env.GA4_MEASUREMENT_ID else 'na' }}">
+            {{ '✓ Configurado' if env.GA4_MEASUREMENT_ID else '○ Não configurado' }}
+          </div>
+        </div>
+      </div>
+      <form class="conn-body" onsubmit="saveEnv(event, 'ga4')">
+        <div class="form-group">
+          <label>Measurement ID</label>
+          <input name="GA4_MEASUREMENT_ID" class="input input-dark" placeholder="G-XXXXXXXXXX" value="{{ env.GA4_MEASUREMENT_ID or '' }}">
+        </div>
+        <div class="form-group">
+          <label>Property ID (numérico)</label>
+          <input name="GA4_PROPERTY_ID" class="input input-dark" placeholder="123456789" value="{{ env.GA4_PROPERTY_ID or '' }}">
+        </div>
+        <div class="form-group">
+          <label>API Secret (Measurement Protocol)</label>
+          <input name="GA4_API_SECRET" class="input input-dark" type="password" placeholder="xxxxxxxxxxxx" value="{{ env.GA4_API_SECRET or '' }}">
+        </div>
+        <div class="form-group">
+          <label>Credentials JSON (Service Account)</label>
+          <input name="GA4_CREDENTIALS_JSON" class="input input-dark" placeholder="/caminho/para/credentials.json" value="{{ env.GA4_CREDENTIALS_JSON or '' }}">
+        </div>
+        <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+          <button type="submit" class="btn btn-primary btn-sm">Salvar</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="ga4Report()">Ver relatório (30d)</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Google Tag Manager -->
+    <div class="conn-card">
+      <div class="conn-header">
+        <div class="conn-icon" style="background:rgba(66,133,244,0.15);">🏷️</div>
+        <div>
+          <div class="conn-name">Google Tag Manager</div>
+          <div class="conn-status {{ 'ok' if env.GTM_ACCOUNT_ID else 'na' }}">
+            {{ '✓ Configurado' if env.GTM_ACCOUNT_ID else '○ Não configurado' }}
+          </div>
+        </div>
+      </div>
+      <form class="conn-body" onsubmit="saveEnv(event, 'gtm')">
+        <div class="form-group">
+          <label>Account ID (numérico)</label>
+          <input name="GTM_ACCOUNT_ID" class="input input-dark" placeholder="123456789" value="{{ env.GTM_ACCOUNT_ID or '' }}">
+        </div>
+        <div class="form-group">
+          <label>Container ID (numérico)</label>
+          <input name="GTM_CONTAINER_ID" class="input input-dark" placeholder="987654321" value="{{ env.GTM_CONTAINER_ID or '' }}">
+        </div>
+        <div class="form-group">
+          <label>Public ID</label>
+          <input name="GTM_PUBLIC_ID" class="input input-dark" placeholder="GTM-XXXXXXX" value="{{ env.GTM_PUBLIC_ID or '' }}">
+        </div>
+        <div class="form-group">
+          <label>Credentials JSON (Service Account)</label>
+          <input name="GTM_CREDENTIALS_JSON" class="input input-dark" placeholder="/caminho/para/credentials.json" value="{{ env.GTM_CREDENTIALS_JSON or '' }}">
+        </div>
+        <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+          <button type="submit" class="btn btn-primary btn-sm">Salvar</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="gtmVerify()">Verificar setup</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="gtmSnippet()">Ver snippet</button>
+        </div>
+      </form>
+    </div>
+
+  </div>
+
+  <!-- Rastreamento output -->
+  <div id="tracking-output" style="display:none;margin-top:1.5rem;padding:1rem 1.25rem;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-family:monospace;font-size:0.8rem;color:var(--muted);white-space:pre-wrap;"></div>
+
+</div>
+
 <!-- ── Tab: Contas por Produto ─────────────────────────────────────────────── -->
 <div id="tab-contas" class="tab-panel" style="display:none;">
 
@@ -392,7 +492,7 @@
   const p = new URLSearchParams(location.search);
   if(p.get('oauth') === 'ok') {
     const ch = p.get('channel') || '';
-    const names = {meta:'Meta Ads',google:'Google Ads',linkedin:'LinkedIn Ads',tiktok:'TikTok Ads'};
+    const names = {meta:'Meta Ads',facebook:'Facebook Ads',google:'Google Ads',linkedin:'LinkedIn Ads',tiktok:'TikTok Ads'};
     showToast((names[ch] || ch) + ' conectado com sucesso!');
     history.replaceState({}, '', '/conexoes');
   }
@@ -481,6 +581,43 @@ async function importProducts() {
     if(status) status.textContent = msg;
     if(out) out.textContent = msg;
   }
+}
+
+async function ga4Report() {
+  const out = document.getElementById('tracking-output');
+  out.style.display = 'block'; out.textContent = 'Buscando relatório GA4...';
+  try {
+    const r = await fetch('/api/ga4/report?days=30');
+    const d = await r.json();
+    if(d.error) { out.textContent = 'Erro GA4: ' + d.error; return; }
+    out.textContent = `GA4 — Propriedade: ${d.property_id}\nPeríodo: ${d.period.from} → ${d.period.to}\nSessões: ${d.totals.sessions}\nConversões: ${d.totals.conversions}\nReceita: R$ ${Number(d.totals.revenue).toFixed(2)}\nLinhas: ${d.rows.length}`;
+  } catch(e) { out.textContent = 'Erro: ' + e.message; }
+}
+
+async function gtmVerify() {
+  const out = document.getElementById('tracking-output');
+  out.style.display = 'block'; out.textContent = 'Verificando setup GTM...';
+  try {
+    const r = await fetch('/api/gtm/verify');
+    const d = await r.json();
+    if(d.error) { out.textContent = 'Erro GTM: ' + d.error; return; }
+    let txt = `GTM — Status: ${d.status}\nVariáveis presentes: ${d.variaveis_presentes}\nTags presentes: ${d.tags_presentes}`;
+    if(d.variaveis_faltando.length) txt += `\nVariáveis faltando: ${d.variaveis_faltando.join(', ')}`;
+    if(d.tags_faltando.length) txt += `\nTags faltando: ${d.tags_faltando.join(', ')}`;
+    out.textContent = txt;
+    showToast('GTM: ' + d.status);
+  } catch(e) { out.textContent = 'Erro: ' + e.message; }
+}
+
+async function gtmSnippet() {
+  const out = document.getElementById('tracking-output');
+  out.style.display = 'block'; out.textContent = 'Buscando snippet GTM...';
+  try {
+    const r = await fetch('/api/gtm/snippet');
+    const d = await r.json();
+    if(d.error) { out.textContent = 'Erro: ' + d.error; return; }
+    out.textContent = d.snippet || 'Snippet não disponível (configure GTM_PUBLIC_ID)';
+  } catch(e) { out.textContent = 'Erro: ' + e.message; }
 }
 
 async function runHealthCheck() {

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Agente IA{% endblock %}
-{% block topbar_title %}Agente IA — Claude{% endblock %}
+{% block title %}MIDAS IA{% endblock %}
+{% block topbar_title %}MIDAS IA — Agente de Tráfego{% endblock %}
 
 {% block head %}
 <style>
@@ -15,7 +15,7 @@
 {% block content %}
 <div class="agent-top">
   <div class="agent-top-left">
-    <h2>Agente de Tráfego Pago</h2>
+    <h2>MIDAS IA</h2>
     <p>Powered by Claude · usa dados reais do dashboard</p>
   </div>
   <div class="product-selector">
@@ -31,10 +31,10 @@
 <div class="chat-wrap">
   <div class="chat-messages" id="chat-messages">
     <div class="msg agent fade-up">
-      <div class="msg-bubble">Olá! Sou seu agente de tráfego pago com IA.
+      <div class="msg-bubble">Olá! Sou <strong>MIDAS IA</strong>, seu agente de tráfego pago.
 
 Selecione um produto no topo e use os comandos abaixo, ou me faça qualquer pergunta sobre suas campanhas.</div>
-      <div class="msg-meta">Agente · agora</div>
+      <div class="msg-meta">MIDAS IA · agora</div>
     </div>
   </div>
 
@@ -113,7 +113,7 @@ function appendMsg(role, text, isPulse=false) {
   const time = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
   div.innerHTML = `
     <div class="msg-bubble ${isPulse ? 'pulse' : ''}">${escHtml(text)}</div>
-    <div class="msg-meta">${role === 'user' ? 'Você' : 'Agente'} · ${time}</div>
+    <div class="msg-meta">${role === 'user' ? 'Você' : 'MIDAS IA'} · ${time}</div>
   `;
   msgs.appendChild(div);
   msgs.scrollTop = msgs.scrollHeight;

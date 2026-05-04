@@ -12,6 +12,11 @@ python-dotenv==1.0.0
 pandas==2.2.0
 psycopg2-binary==2.9.9
 
+# Google Analytics 4 + Tag Manager
+google-analytics-data==0.18.9
+google-api-python-client==2.131.0
+google-auth==2.30.0
+
 # Canais de Ads
 google-ads==24.1.0
 facebook-business==19.0.0

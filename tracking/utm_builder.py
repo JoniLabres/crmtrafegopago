@@ -126,6 +126,13 @@ if __name__ == "__main__":
             "term": "18-34",
         },
         {
+            "source": "facebook",
+            "medium": "paid_social",
+            "campaign_parts": {"produto": "produto-a", "funil": "topo", "objetivo": "leads", "ano_mes": "2025-05"},
+            "content": "video_testemunho_v1",
+            "term": "lookalike-compradores",
+        },
+        {
             "source": "programatica",
             "medium": "display",
             "campaign_parts": {"produto": "produto-b", "funil": "meio", "objetivo": "trafego", "ano_mes": "2025-05"},
