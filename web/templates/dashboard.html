@@ -37,7 +37,7 @@
 </div>
 
 <!-- KPIs de Mídia -->
-<div class="kpi-grid">
+<div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);">
   <div class="kpi-card">
     <div class="kpi-label">Total Investido</div>
     <div class="kpi-value green">R$ {{ "%.0f"|format(kpis.spend) }}</div>
@@ -56,7 +56,14 @@
   <div class="kpi-card">
     <div class="kpi-label">ROAS Médio</div>
     <div class="kpi-value {% if kpis.roas >= 3 %}green{% endif %}">{{ "%.2f"|format(kpis.roas) }}x</div>
-    <div class="kpi-sub">Meta: {% if kpis.roas_meta %}{{ kpis.roas_meta }}x{% else %}—{% endif %}</div>
+    <div class="kpi-sub">por canal · atribuído</div>
+  </div>
+  <div class="kpi-card" title="MER = Receita Total / Investimento Total em todos os canais. Diferente do ROAS (atribuído por canal), o MER usa a receita real do negócio — sem viés de atribuição.">
+    <div class="kpi-label">MER <span style="font-size:0.65rem;color:var(--muted);font-weight:400;">(blended)</span></div>
+    <div class="kpi-value {% if kpis.mer >= 3 %}green{% elif kpis.mer > 0 and kpis.mer < 2 %}text-danger{% endif %}">
+      {% if kpis.mer > 0 %}{{ "%.2f"|format(kpis.mer) }}x{% else %}—{% endif %}
+    </div>
+    <div class="kpi-sub">receita ÷ investimento total</div>
   </div>
 </div>
 
@@ -124,10 +131,16 @@
           <th>LTV Médio</th>
           <th>MRR</th>
           <th>Churn</th>
+          <th title="MER = Receita Total / Investimento em Mídia. Usa MRR projetado × retenção vs. gasto de campanha no período.">MER</th>
         </tr>
       </thead>
       <tbody>
         {% for nome, m in ltv.por_produto.items() %}
+        {% set spend_produto = namespace(val=0) %}
+        {% for c in by_channel %}{% endfor %}
+        {% set produto_spend = top_campaigns | selectattr('produto', 'equalto', nome) | sum(attribute='spend') %}
+        {% set produto_rev = top_campaigns | selectattr('produto', 'equalto', nome) | sum(attribute='revenue') %}
+        {% set mer_produto = (produto_rev / produto_spend) if produto_spend > 0 else 0 %}
         <tr>
           <td style="font-weight:600;">{{ nome }}</td>
           <td>{{ m.total_clientes }}</td>
@@ -138,6 +151,9 @@
           <td class="text-green" style="font-weight:600;">R$ {{ "%.0f"|format(m.ltv_medio) }}</td>
           <td>R$ {{ "%.0f"|format(m.mrr) }}</td>
           <td class="{% if m.churn_rate_pct > 5 %}text-danger{% endif %}">{{ m.churn_rate_pct }}%</td>
+          <td class="{% if mer_produto >= 3 %}text-green{% elif mer_produto > 0 and mer_produto < 2 %}text-danger{% endif %}" style="font-weight:600;">
+            {% if mer_produto > 0 %}{{ "%.2f"|format(mer_produto) }}x{% else %}—{% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>

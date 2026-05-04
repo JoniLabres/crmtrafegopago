@@ -54,9 +54,12 @@ def _get_client():
     return BetaAnalyticsDataClient()
 
 
-def fetch_report(days: int = 30, produto: str = None) -> dict:
+def fetch_report(days: int = 30, produto: str = None, property_id: str = None) -> dict:
     """
     Pulls session + conversion data from GA4, grouped by UTM parameters.
+
+    property_id: overrides GA4_PROPERTY_ID env var — use when each product
+                 has its own GA4 property (stored in accounts.json rastreamento).
     Returns a dict ready to be saved or merged into campaigns_daily.
     """
     from google.analytics.data_v1beta.types import (
@@ -66,9 +69,9 @@ def fetch_report(days: int = 30, produto: str = None) -> dict:
         Metric,
     )
 
-    property_id = os.getenv("GA4_PROPERTY_ID", "")
+    property_id = property_id or os.getenv("GA4_PROPERTY_ID", "")
     if not property_id:
-        raise EnvironmentError("GA4_PROPERTY_ID não configurado")
+        raise EnvironmentError("GA4_PROPERTY_ID não configurado (ou ausente no rastreamento do produto)")
 
     client = _get_client()
     date_to = date.today()

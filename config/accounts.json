@@ -5,6 +5,7 @@
       "contas": {
         "meta": {
           "ad_account_id": "",
+          "pixel_id": "",
           "access_token_env": "META_ACCESS_TOKEN"
         },
         "google": {
@@ -14,12 +15,20 @@
         },
         "linkedin": {
           "ad_account_id": "",
+          "partner_id": "",
           "access_token_env": "LINKEDIN_ACCESS_TOKEN"
         },
         "tiktok": {
           "ad_account_id": "",
+          "pixel_id": "",
           "access_token_env": "TIKTOK_ACCESS_TOKEN"
         }
+      },
+      "rastreamento": {
+        "ga4_measurement_id": "",
+        "ga4_property_id": "",
+        "gtm_public_id": "",
+        "gtm_container_id": ""
       }
     }
   ]

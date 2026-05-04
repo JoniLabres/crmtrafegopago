@@ -384,18 +384,25 @@
       </div>
       <div class="panel-body">
         <form onsubmit="saveAccount(event, '{{ produto.nome }}')">
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;">
+
+          <!-- Canais de Anúncio -->
+          <div style="font-size:0.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.75rem;">Canais de Anúncio</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:1rem;margin-bottom:1.5rem;">
             <!-- Meta -->
             <div>
-              <div style="font-size:0.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;">📘 Meta Ads</div>
+              <div style="font-size:0.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;">📘 Meta / Facebook Ads</div>
               <div class="form-group">
                 <label>Ad Account ID</label>
                 <input class="input input-dark" name="meta_ad_account_id" placeholder="act_000000000" value="{{ produto.contas.meta.ad_account_id if produto.contas and produto.contas.meta else '' }}">
               </div>
+              <div class="form-group">
+                <label>Pixel ID</label>
+                <input class="input input-dark" name="meta_pixel_id" placeholder="000000000000000" value="{{ produto.contas.meta.pixel_id if produto.contas and produto.contas.meta else '' }}">
+              </div>
             </div>
             <!-- Google -->
             <div>
-              <div style="font-size:0.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;">🔴 Google Ads</div>
+              <div style="font-size:0.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;">🔴 Google Ads</div>
               <div class="form-group">
                 <label>Customer ID</label>
                 <input class="input input-dark" name="google_customer_id" placeholder="123-456-7890" value="{{ produto.contas.google.customer_id if produto.contas and produto.contas.google else '' }}">
@@ -403,23 +410,55 @@
             </div>
             <!-- LinkedIn -->
             <div>
-              <div style="font-size:0.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;">💼 LinkedIn Ads</div>
+              <div style="font-size:0.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;">💼 LinkedIn Ads</div>
               <div class="form-group">
                 <label>Ad Account ID</label>
                 <input class="input input-dark" name="linkedin_ad_account_id" placeholder="000000000" value="{{ produto.contas.linkedin.ad_account_id if produto.contas and produto.contas.linkedin else '' }}">
               </div>
+              <div class="form-group">
+                <label>Insight Tag (Partner ID)</label>
+                <input class="input input-dark" name="linkedin_partner_id" placeholder="0000000" value="{{ produto.contas.linkedin.partner_id if produto.contas and produto.contas.linkedin else '' }}">
+              </div>
             </div>
             <!-- TikTok -->
             <div>
-              <div style="font-size:0.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;">🎵 TikTok Ads</div>
+              <div style="font-size:0.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;">🎵 TikTok Ads</div>
               <div class="form-group">
                 <label>Ad Account ID</label>
                 <input class="input input-dark" name="tiktok_ad_account_id" placeholder="000000000000" value="{{ produto.contas.tiktok.ad_account_id if produto.contas and produto.contas.tiktok else '' }}">
               </div>
+              <div class="form-group">
+                <label>Pixel ID</label>
+                <input class="input input-dark" name="tiktok_pixel_id" placeholder="XXXXXXXXXXXXXXXXXXXX" value="{{ produto.contas.tiktok.pixel_id if produto.contas and produto.contas.tiktok else '' }}">
+              </div>
             </div>
           </div>
+
+          <!-- Rastreamento -->
+          <div style="border-top:1px solid var(--border);padding-top:1.25rem;margin-bottom:1rem;">
+            <div style="font-size:0.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.75rem;">Rastreamento — GA4 e GTM</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:1rem;">
+              <div class="form-group">
+                <label>GA4 Measurement ID</label>
+                <input class="input input-dark" name="ga4_measurement_id" placeholder="G-XXXXXXXXXX" value="{{ produto.rastreamento.ga4_measurement_id if produto.rastreamento else '' }}">
+              </div>
+              <div class="form-group">
+                <label>GA4 Property ID</label>
+                <input class="input input-dark" name="ga4_property_id" placeholder="123456789" value="{{ produto.rastreamento.ga4_property_id if produto.rastreamento else '' }}">
+              </div>
+              <div class="form-group">
+                <label>GTM Public ID</label>
+                <input class="input input-dark" name="gtm_public_id" placeholder="GTM-XXXXXXX" value="{{ produto.rastreamento.gtm_public_id if produto.rastreamento else '' }}">
+              </div>
+              <div class="form-group">
+                <label>GTM Container ID</label>
+                <input class="input input-dark" name="gtm_container_id" placeholder="987654321" value="{{ produto.rastreamento.gtm_container_id if produto.rastreamento else '' }}">
+              </div>
+            </div>
+          </div>
+
           <div style="display:flex;justify-content:flex-end;margin-top:1rem;">
-            <button type="submit" class="btn btn-primary btn-sm">Salvar contas de {{ produto.nome }}</button>
+            <button type="submit" class="btn btn-primary btn-sm">Salvar {{ produto.nome }}</button>
           </div>
         </form>
       </div>
@@ -519,14 +558,21 @@ async function saveEnv(e, _) {
 async function saveAccount(e, produto) {
   e.preventDefault();
   const form = e.target;
+  const v = name => form.elements[name]?.value || '';
   const data = {
     nome: produto,
     contas: {
-      meta: { ad_account_id: form.meta_ad_account_id.value },
-      google: { customer_id: form.google_customer_id.value },
-      linkedin: { ad_account_id: form.linkedin_ad_account_id.value },
-      tiktok: { ad_account_id: form.tiktok_ad_account_id.value },
-    }
+      meta:     { ad_account_id: v('meta_ad_account_id'),     pixel_id:   v('meta_pixel_id') },
+      google:   { customer_id:   v('google_customer_id') },
+      linkedin: { ad_account_id: v('linkedin_ad_account_id'), partner_id: v('linkedin_partner_id') },
+      tiktok:   { ad_account_id: v('tiktok_ad_account_id'),   pixel_id:   v('tiktok_pixel_id') },
+    },
+    rastreamento: {
+      ga4_measurement_id: v('ga4_measurement_id'),
+      ga4_property_id:    v('ga4_property_id'),
+      gtm_public_id:      v('gtm_public_id'),
+      gtm_container_id:   v('gtm_container_id'),
+    },
   };
   const r = await fetch('/api/accounts/save', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
   const d = await r.json();
@@ -555,7 +601,13 @@ async function addProduct(e) {
   if(!nome) return;
   const data = {
     nome,
-    contas: { meta:{ad_account_id:''}, google:{customer_id:''}, linkedin:{ad_account_id:''}, tiktok:{ad_account_id:''} }
+    contas: {
+      meta:     { ad_account_id: '', pixel_id: '' },
+      google:   { customer_id: '' },
+      linkedin: { ad_account_id: '', partner_id: '' },
+      tiktok:   { ad_account_id: '', pixel_id: '' },
+    },
+    rastreamento: { ga4_measurement_id: '', ga4_property_id: '', gtm_public_id: '', gtm_container_id: '' },
   };
   const r = await fetch('/api/accounts/save', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
   const d = await r.json();

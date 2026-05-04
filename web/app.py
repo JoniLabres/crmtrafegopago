@@ -144,16 +144,17 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
 
         conn.close()
         cpl = round(spend / leads, 2) if leads else 0
+        mer = round(revenue / spend, 2) if spend > 0 else 0
         return {
             "kpis": {"spend": float(spend), "leads": int(leads), "revenue": float(revenue),
                      "channels": int(channels), "roas": float(roas), "cpl": cpl,
-                     "deals": 0, "roas_meta": 4.0},
+                     "mer": mer, "deals": 0, "roas_meta": 4.0},
             "by_channel": by_channel, "top_campaigns": top_campaigns, "alerts": alerts,
         }
     except Exception as e:
         logger.warning("DB indisponível: %s", e)
         return {
-            "kpis": {"spend":0,"leads":0,"revenue":0,"channels":0,"roas":0,"cpl":0,"deals":0,"roas_meta":4.0},
+            "kpis": {"spend":0,"leads":0,"revenue":0,"channels":0,"roas":0,"cpl":0,"mer":0,"deals":0,"roas_meta":4.0},
             "by_channel": [], "top_campaigns": [], "alerts": [],
         }
 
@@ -513,17 +514,44 @@ async def accounts_save(request: Request):
         return JSONResponse({"message": "Nome do produto é obrigatório"}, status_code=400)
     accounts = _load_accounts()
     existing = next((p for p in accounts if p["nome"] == nome), None)
+    default_contas = {
+        "meta": {"ad_account_id": "", "pixel_id": ""},
+        "google": {"customer_id": ""},
+        "linkedin": {"ad_account_id": "", "partner_id": ""},
+        "tiktok": {"ad_account_id": "", "pixel_id": ""},
+    }
+    default_rastreamento = {
+        "ga4_measurement_id": "", "ga4_property_id": "",
+        "gtm_public_id": "", "gtm_container_id": "",
+    }
     if existing:
-        existing["contas"] = data.get("contas", existing.get("contas", {}))
+        existing["contas"] = data.get("contas", existing.get("contas", default_contas))
+        existing["rastreamento"] = data.get("rastreamento", existing.get("rastreamento", default_rastreamento))
     else:
-        accounts.append({"nome": nome, "contas": data.get("contas", {
-            "meta": {"ad_account_id": ""},
-            "google": {"customer_id": ""},
-            "linkedin": {"ad_account_id": ""},
-            "tiktok": {"ad_account_id": ""},
-        })})
+        accounts.append({
+            "nome": nome,
+            "contas": data.get("contas", default_contas),
+            "rastreamento": data.get("rastreamento", default_rastreamento),
+        })
     config_store.save("accounts", {"produtos": accounts}, ACCOUNTS_PATH)
     return {"message": f"Contas de '{nome}' salvas"}
+
+
+@app.get("/api/accounts/tracking/{nome}")
+async def accounts_tracking(nome: str):
+    accounts = _load_accounts()
+    produto = next((p for p in accounts if p["nome"] == nome), None)
+    if not produto:
+        return JSONResponse({"error": f"Produto '{nome}' não encontrado"}, status_code=404)
+    return {
+        "nome": nome,
+        "rastreamento": produto.get("rastreamento", {}),
+        "contas": {
+            "meta_pixel_id": produto.get("contas", {}).get("meta", {}).get("pixel_id", ""),
+            "linkedin_partner_id": produto.get("contas", {}).get("linkedin", {}).get("partner_id", ""),
+            "tiktok_pixel_id": produto.get("contas", {}).get("tiktok", {}).get("pixel_id", ""),
+        },
+    }
 
 
 @app.post("/api/accounts/remove")
@@ -710,7 +738,16 @@ async def ga4_report(request: Request):
         params = request.query_params
         days = int(params.get("days", 30))
         produto = params.get("produto", "").strip() or None
-        report = fetch_report(days=days, produto=produto)
+
+        # Use per-product GA4 property if configured
+        property_id = None
+        if produto:
+            accounts = _load_accounts()
+            p = next((a for a in accounts if a["nome"] == produto), None)
+            if p:
+                property_id = p.get("rastreamento", {}).get("ga4_property_id") or None
+
+        report = fetch_report(days=days, produto=produto, property_id=property_id)
         return report
     except EnvironmentError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
