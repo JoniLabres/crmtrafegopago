@@ -19,7 +19,7 @@ class MetaAdsPuller(BasePuller):
 
     def auth(self):
         self.access_token = os.getenv("META_ACCESS_TOKEN")
-        self.ad_account_id = os.getenv("META_AD_ACCOUNT_ID")
+        self.ad_account_id = self._cfg("ad_account_id", "META_AD_ACCOUNT_ID")
         if not self.access_token or not self.ad_account_id:
             raise EnvironmentError("META_ACCESS_TOKEN e META_AD_ACCOUNT_ID são obrigatórios")
 

@@ -18,7 +18,7 @@ class LinkedInAdsPuller(BasePuller):
 
     def auth(self):
         self.access_token = os.getenv("LINKEDIN_ACCESS_TOKEN")
-        self.ad_account_id = os.getenv("LINKEDIN_AD_ACCOUNT_ID")
+        self.ad_account_id = self._cfg("ad_account_id", "LINKEDIN_AD_ACCOUNT_ID")
         if not self.access_token or not self.ad_account_id:
             raise EnvironmentError("LINKEDIN_ACCESS_TOKEN e LINKEDIN_AD_ACCOUNT_ID são obrigatórios")
         self.headers = {

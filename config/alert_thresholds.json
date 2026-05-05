@@ -3,6 +3,7 @@
     "produto-a": {
       "cpl_meta": 100.0,
       "roas_meta": 4.0,
+      "mer_meta": 2.0,
       "leads_meta_diario": 10,
       "budget_mensal": 5000.0,
       "frequencia_max_meta": 4.0
@@ -10,6 +11,7 @@
     "produto-b": {
       "cpl_meta": 150.0,
       "roas_meta": 3.0,
+      "mer_meta": 1.8,
       "leads_meta_diario": 5,
       "budget_mensal": 3000.0,
       "frequencia_max_meta": 3.5
@@ -17,6 +19,7 @@
     "produto-c": {
       "cpl_meta": 200.0,
       "roas_meta": 2.5,
+      "mer_meta": 1.5,
       "leads_meta_diario": 3,
       "budget_mensal": 2000.0,
       "frequencia_max_meta": 3.0

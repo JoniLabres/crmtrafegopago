@@ -18,6 +18,8 @@ SEVERITY_EMOJI = {
     "ok": "🟢",
 }
 
+_DEFAULT_THRESHOLDS = {"produtos": {}}
+
 
 class AlertSystem:
     def __init__(self, db_conn=None, slack_webhook: str = None):
@@ -26,8 +28,18 @@ class AlertSystem:
         self.thresholds = self._load_thresholds()
 
     def _load_thresholds(self) -> dict:
-        with open(THRESHOLDS_PATH, encoding="utf-8") as f:
-            return json.load(f)["produtos"]
+        try:
+            import sys
+            sys.path.insert(0, str(Path(__file__).parent.parent / "data_pipeline"))
+            import config_store
+            data = config_store.load("thresholds", THRESHOLDS_PATH, _DEFAULT_THRESHOLDS)
+        except (ImportError, Exception):
+            try:
+                with open(THRESHOLDS_PATH, encoding="utf-8") as f:
+                    data = json.load(f)
+            except FileNotFoundError:
+                data = _DEFAULT_THRESHOLDS
+        return data.get("produtos", {}) if isinstance(data, dict) else {}
 
     def _get_conn(self):
         if self.db_conn:
@@ -135,6 +147,33 @@ class AlertSystem:
             })
         return alerts
 
+    def check_mer_baixo(self, produto: str, data: list = None) -> list:
+        """MER blended (receita total / gasto total) abaixo da meta por 7+ dias."""
+        alerts = []
+        meta = self.thresholds.get(produto, {}).get("mer_meta", 1.5)
+
+        rows = data if data is not None else self._query_mer_baixo(produto, meta)
+        for row in rows:
+            mer = row.get("mer", 0)
+            severity = "critico" if mer < meta * 0.7 else "atencao"
+            msg = (
+                f"MER baixo para *{produto}*: "
+                f"{mer:.2f}x vs meta {meta:.1f}x "
+                f"(receita R${row.get('receita_total', 0):.2f} / "
+                f"gasto R${row.get('gasto_total', 0):.2f}) "
+                f"nos últimos 7 dias"
+            )
+            alerts.append({
+                "alert_type": "mer_baixo",
+                "channel": "all",
+                "campaign_utm": "all",
+                "produto": produto,
+                "severity": severity,
+                "message": msg,
+                "details": row,
+            })
+        return alerts
+
     # ── Queries ───────────────────────────────────────────────────────────────
 
     def _query_cpl_alto(self, produto: str, meta: float) -> list:
@@ -215,6 +254,24 @@ class AlertSystem:
         """
         return self._run_query(sql, {"produto": produto, "budget": budget})
 
+    def _query_mer_baixo(self, produto: str, meta: float) -> list:
+        sql = """
+        SELECT
+            %(produto)s AS produto,
+            ROUND(SUM(revenue)::numeric, 2) AS receita_total,
+            ROUND(SUM(spend)::numeric, 2) AS gasto_total,
+            ROUND(
+                CASE WHEN SUM(spend) > 0 THEN SUM(revenue) / SUM(spend) ELSE 0 END
+            ::numeric, 4) AS mer
+        FROM campaigns_daily
+        WHERE produto = %(produto)s
+          AND date >= CURRENT_DATE - 7
+          AND spend > 0
+        HAVING SUM(spend) > 0
+           AND (SUM(revenue) / NULLIF(SUM(spend), 0)) < %(meta)s
+        """
+        return self._run_query(sql, {"produto": produto, "meta": meta})
+
     def _run_query(self, sql: str, params: dict) -> list:
         conn = self._get_conn()
         try:
@@ -236,6 +293,7 @@ class AlertSystem:
                 self.check_roas_baixo,
                 self.check_queda_leads,
                 self.check_budget_pace,
+                self.check_mer_baixo,
             ]:
                 try:
                     alerts = check_fn(produto)

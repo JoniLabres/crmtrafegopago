@@ -15,7 +15,7 @@ class GoogleAdsPuller(BasePuller):
 
     def auth(self):
         self.developer_token = os.getenv("GOOGLE_ADS_DEVELOPER_TOKEN")
-        self.customer_id = os.getenv("GOOGLE_ADS_CUSTOMER_ID", "").replace("-", "")
+        self.customer_id = self._cfg("customer_id", "GOOGLE_ADS_CUSTOMER_ID").replace("-", "")
         self.client_id = os.getenv("GOOGLE_ADS_CLIENT_ID")
         self.client_secret = os.getenv("GOOGLE_ADS_CLIENT_SECRET")
         self.refresh_token = os.getenv("GOOGLE_ADS_REFRESH_TOKEN")
