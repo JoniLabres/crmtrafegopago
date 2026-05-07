@@ -4,7 +4,7 @@
       "nome": "produto-a",
       "contas": {
         "meta": {
-          "ad_account_id": "",
+          "ad_account_id": "act_1765534214878382",
           "pixel_id": "",
           "access_token_env": "META_ACCESS_TOKEN"
         },
