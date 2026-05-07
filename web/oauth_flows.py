@@ -1,21 +1,88 @@
 """OAuth 2.0 flows for Meta Ads, Google Ads, LinkedIn Ads and TikTok Ads."""
 import os
 import secrets
+import time
 import httpx
 from urllib.parse import urlencode
 
-# In-memory state store (request → state string, expires on use)
-_states: dict[str, str] = {}
+# In-memory fallback (works for single-process local dev)
+_states: dict[str, tuple[str, float]] = {}  # token → (channel, expires_at)
+_STATE_TTL = 600  # 10 minutes
+
+
+def _db_state_save(token: str, channel: str) -> bool:
+    """Persist OAuth state to PostgreSQL when available (required on Vercel)."""
+    db_url = os.getenv("DATABASE_URL", "")
+    if not db_url:
+        return False
+    try:
+        import psycopg2
+        conn = psycopg2.connect(db_url)
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS oauth_states (
+                    token TEXT PRIMARY KEY,
+                    channel TEXT NOT NULL,
+                    expires_at TIMESTAMPTZ NOT NULL
+                )
+            """)
+            cur.execute("""
+                INSERT INTO oauth_states (token, channel, expires_at)
+                VALUES (%s, %s, NOW() + INTERVAL '10 minutes')
+                ON CONFLICT (token) DO NOTHING
+            """, (token, channel))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def _db_state_pop(token: str) -> str | None:
+    """Consume and return channel for the given state token from DB."""
+    db_url = os.getenv("DATABASE_URL", "")
+    if not db_url:
+        return None
+    try:
+        import psycopg2
+        conn = psycopg2.connect(db_url)
+        channel = None
+        with conn.cursor() as cur:
+            cur.execute("""
+                DELETE FROM oauth_states
+                WHERE token = %s AND expires_at > NOW()
+                RETURNING channel
+            """, (token,))
+            row = cur.fetchone()
+            if row:
+                channel = row[0]
+        conn.commit()
+        conn.close()
+        return channel
+    except Exception:
+        return None
 
 
 def generate_state(channel: str) -> str:
     token = secrets.token_urlsafe(24)
-    _states[token] = channel
+    # Try DB first (required on Vercel); fall back to memory
+    if not _db_state_save(token, channel):
+        _states[token] = (channel, time.time() + _STATE_TTL)
     return token
 
 
 def verify_state(state: str, expected_channel: str) -> bool:
-    channel = _states.pop(state, None)
+    # Try DB first
+    channel = _db_state_pop(state)
+    if channel is not None:
+        return channel == expected_channel
+    # Fall back to memory (local dev without DB)
+    entry = _states.pop(state, None)
+    if entry is None:
+        return False
+    channel, expires_at = entry
+    if time.time() > expires_at:
+        return False
     return channel == expected_channel
 
 
