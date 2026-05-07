@@ -755,12 +755,14 @@ async function runHealthCheck() {
   out.textContent = d.output;
 }
 async function runPipeline() {
+  const days = prompt('Quantos dias de histórico puxar?', '7');
+  if (days === null) return;
   const out = document.getElementById('action-output');
-  out.style.display = 'block'; out.textContent = 'Executando pipeline...';
-  const r = await fetch('/api/pipeline/run', {method:'POST'});
+  out.style.display = 'block'; out.textContent = `Executando pipeline (últimos ${days} dias)...`;
+  const r = await fetch('/api/pipeline/run', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({days: parseInt(days)||7})});
   const d = await r.json();
   out.textContent = d.message;
-  showToast(d.message);
+  showToast(d.message, d.error ? 'error' : 'ok');
 }
 async function createHubSpotProps() {
   const out = document.getElementById('action-output');

@@ -442,12 +442,25 @@ async def alerts_thresholds(request: Request):
 # ── API: Actions ──────────────────────────────────────────────────────────────
 
 @app.post("/api/pipeline/run")
-async def pipeline_run():
+async def pipeline_run(request: Request):
+    params = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    days = int(params.get("days", 7))
     try:
-        from load_database import run_pipeline
-        total = run_pipeline()
-        return {"message": f"Pipeline concluído: {total} campanhas carregadas"}
+        from load_database import run_pipeline, _load_accounts, _pull_produto
+        from datetime import date, timedelta
+
+        # Quick diagnostic before full run
+        accounts = _load_accounts()
+        if not accounts:
+            return JSONResponse({"message": "Nenhum produto em accounts.json. Configure em Conexões → Contas por Produto."}, status_code=400)
+
+        date_to = date.today()
+        date_from = date_to - timedelta(days=days)
+
+        total = run_pipeline(date_from=date_from, date_to=date_to)
+        return {"message": f"Pipeline concluído: {total} campanhas carregadas ({date_from} → {date_to}, {len(accounts)} produto(s))"}
     except Exception as e:
+        logger.error("Pipeline error: %s", e, exc_info=True)
         return JSONResponse({"message": f"Erro: {e}"}, status_code=500)
 
 @app.post("/api/hubspot/create-properties")
@@ -662,6 +675,31 @@ async def accounts_remove(request: Request):
     if not ok and config_store.IS_VERCEL:
         return JSONResponse({"message": "Adicione DATABASE_URL para persistir no Vercel", "error": True}, status_code=500)
     return {"message": f"Produto '{nome}' removido"}
+
+@app.get("/api/pipeline/debug")
+async def pipeline_debug():
+    """Mostra o estado das credenciais e contas sem executar o pipeline."""
+    import sys as _sys
+    accounts = _load_accounts()
+    meta_token = os.getenv("META_ACCESS_TOKEN", "")
+    meta_account = os.getenv("META_AD_ACCOUNT_ID", "")
+    db_url = os.getenv("DATABASE_URL", "")
+    return {
+        "python": _sys.version,
+        "is_vercel": config_store.IS_VERCEL,
+        "database_url_set": bool(db_url),
+        "meta_token_set": bool(meta_token),
+        "meta_token_prefix": meta_token[:10] + "..." if meta_token else "",
+        "meta_account_global_env": meta_account,
+        "produtos": [
+            {
+                "nome": p["nome"],
+                "meta_ad_account_id": p.get("contas", {}).get("meta", {}).get("ad_account_id", ""),
+            }
+            for p in accounts
+        ],
+    }
+
 
 @app.post("/api/db/setup")
 async def db_setup():
