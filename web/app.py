@@ -663,6 +663,29 @@ async def accounts_remove(request: Request):
         return JSONResponse({"message": "Adicione DATABASE_URL para persistir no Vercel", "error": True}, status_code=500)
     return {"message": f"Produto '{nome}' removido"}
 
+@app.post("/api/db/setup")
+async def db_setup():
+    """Create all tables from schema.sql. Safe to run multiple times (CREATE IF NOT EXISTS)."""
+    db_url = os.getenv("DATABASE_URL", "")
+    if not db_url:
+        return JSONResponse({"message": "DATABASE_URL não configurada", "error": True}, status_code=400)
+    schema_path = ROOT / "dashboard" / "schema.sql"
+    if not schema_path.exists():
+        return JSONResponse({"message": "schema.sql não encontrado", "error": True}, status_code=500)
+    try:
+        import psycopg2
+        conn = psycopg2.connect(db_url)
+        sql = schema_path.read_text(encoding="utf-8")
+        with conn.cursor() as cur:
+            cur.execute(sql)
+        conn.commit()
+        conn.close()
+        return {"message": "Banco configurado: tabelas campaigns_daily, alerts_log e ixc_config criadas (ou já existiam)"}
+    except Exception as e:
+        logger.error("db/setup error: %s", e)
+        return JSONResponse({"message": f"Erro ao configurar banco: {e}", "error": True}, status_code=500)
+
+
 @app.post("/api/health-check")
 async def health_check():
     lines = []

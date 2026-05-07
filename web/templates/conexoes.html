@@ -505,6 +505,7 @@
   <div class="panel">
     <div class="panel-head"><h3>Ações rápidas</h3></div>
     <div class="panel-body" style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="setupDb()" title="Cria as tabelas no banco PostgreSQL (seguro rodar múltiplas vezes)">🗄️ Configurar banco</button>
       <button class="btn btn-outline" onclick="runHealthCheck()">Health Check</button>
       <button class="btn btn-ghost" onclick="runPipeline()">Executar Pipeline</button>
       <button class="btn btn-ghost" onclick="createHubSpotProps()">Criar propriedades HubSpot</button>
@@ -735,6 +736,15 @@ async function gtmSnippet() {
     if(d.error) { out.textContent = 'Erro: ' + d.error; return; }
     out.textContent = d.snippet || 'Snippet não disponível (configure GTM_PUBLIC_ID)';
   } catch(e) { out.textContent = 'Erro: ' + e.message; }
+}
+
+async function setupDb() {
+  const out = document.getElementById('action-output');
+  out.style.display = 'block'; out.textContent = 'Configurando banco de dados...';
+  const r = await fetch('/api/db/setup', {method:'POST'});
+  const d = await r.json();
+  out.textContent = d.message;
+  showToast(d.message, d.error ? 'error' : 'ok');
 }
 
 async function runHealthCheck() {
