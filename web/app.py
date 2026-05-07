@@ -42,20 +42,36 @@ _agent_instance = None
 _active_product = None
 
 
+_ENV_KEYS = [
+    "META_CLIENT_ID","META_CLIENT_SECRET","META_ACCESS_TOKEN","META_AD_ACCOUNT_ID","META_PIXEL_ID",
+    "GOOGLE_ADS_CLIENT_ID","GOOGLE_ADS_CLIENT_SECRET",
+    "GOOGLE_ADS_DEVELOPER_TOKEN","GOOGLE_ADS_CUSTOMER_ID","GOOGLE_ADS_REFRESH_TOKEN",
+    "LINKEDIN_CLIENT_ID","LINKEDIN_CLIENT_SECRET",
+    "LINKEDIN_ACCESS_TOKEN","LINKEDIN_AD_ACCOUNT_ID","LINKEDIN_PARTNER_ID",
+    "TIKTOK_CLIENT_ID","TIKTOK_CLIENT_SECRET",
+    "TIKTOK_ACCESS_TOKEN","TIKTOK_AD_ACCOUNT_ID","TIKTOK_PIXEL_ID",
+    "HUBSPOT_API_KEY","ANTHROPIC_API_KEY","SLACK_WEBHOOK_URL","DATABASE_URL","APP_BASE_URL",
+    "GA4_MEASUREMENT_ID","GA4_PROPERTY_ID","GA4_API_SECRET","GA4_CREDENTIALS_JSON",
+    "GTM_ACCOUNT_ID","GTM_CONTAINER_ID","GTM_PUBLIC_ID","GTM_CREDENTIALS_JSON",
+]
+
+
+def _load_env_overrides() -> dict:
+    """Load env vars saved via the form from ixc_config (Vercel + DB only)."""
+    overrides = config_store.load("env_overrides", None, {})
+    return overrides if isinstance(overrides, dict) else {}
+
+
+def _apply_env_overrides() -> None:
+    """Inject DB-persisted env vars into os.environ (called at request time)."""
+    for k, v in _load_env_overrides().items():
+        if v and not os.environ.get(k):
+            os.environ[k] = v
+
+
 def _get_env() -> dict:
-    keys = [
-        "META_CLIENT_ID","META_CLIENT_SECRET","META_ACCESS_TOKEN","META_AD_ACCOUNT_ID","META_PIXEL_ID",
-        "GOOGLE_ADS_CLIENT_ID","GOOGLE_ADS_CLIENT_SECRET",
-        "GOOGLE_ADS_DEVELOPER_TOKEN","GOOGLE_ADS_CUSTOMER_ID","GOOGLE_ADS_REFRESH_TOKEN",
-        "LINKEDIN_CLIENT_ID","LINKEDIN_CLIENT_SECRET",
-        "LINKEDIN_ACCESS_TOKEN","LINKEDIN_AD_ACCOUNT_ID","LINKEDIN_PARTNER_ID",
-        "TIKTOK_CLIENT_ID","TIKTOK_CLIENT_SECRET",
-        "TIKTOK_ACCESS_TOKEN","TIKTOK_AD_ACCOUNT_ID","TIKTOK_PIXEL_ID",
-        "HUBSPOT_API_KEY","ANTHROPIC_API_KEY","SLACK_WEBHOOK_URL","DATABASE_URL","APP_BASE_URL",
-        "GA4_MEASUREMENT_ID","GA4_PROPERTY_ID","GA4_API_SECRET","GA4_CREDENTIALS_JSON",
-        "GTM_ACCOUNT_ID","GTM_CONTAINER_ID","GTM_PUBLIC_ID","GTM_CREDENTIALS_JSON",
-    ]
-    return {k: os.getenv(k, "") for k in keys}
+    _apply_env_overrides()
+    return {k: os.getenv(k, "") for k in _ENV_KEYS}
 
 
 def _load_accounts() -> list:
@@ -320,9 +336,19 @@ async def env_save(request: Request):
                 pass
     if not config_store.IS_VERCEL:
         load_dotenv(ENV_PATH, override=True)
+
+    # Persist to DB so vars survive across serverless invocations
+    if os.getenv("DATABASE_URL"):
+        existing = _load_env_overrides()
+        for key, value in data.items():
+            if value:
+                existing[key] = value
+        config_store.save("env_overrides", existing, None)
+        return {"message": f"{saved} variável(is) salva(s) no banco de dados"}
+
     if config_store.IS_VERCEL:
         return {
-            "message": f"{saved} variável(is) ativa(s) nesta sessão — adicione no painel do Vercel (Settings → Environment Variables) para persistir",
+            "message": f"{saved} variável(is) ativa(s) nesta sessão apenas — configure DATABASE_URL para persistir",
             "warn": True,
         }
     return {"message": f"{saved} variável(is) salva(s) no .env"}
@@ -448,6 +474,9 @@ async def pipeline_run(request: Request):
     try:
         from load_database import run_pipeline, _load_accounts, _pull_produto
         from datetime import date, timedelta
+
+        # Load DB-persisted env vars before running pipeline
+        _apply_env_overrides()
 
         # Quick diagnostic before full run
         accounts = _load_accounts()
