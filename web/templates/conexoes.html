@@ -3,6 +3,23 @@
 {% block topbar_title %}Conexões — APIs e Contas por Produto{% endblock %}
 
 {% block content %}
+
+{% if is_vercel and not has_db %}
+<div style="background:rgba(255,180,0,0.12);border:1px solid rgba(255,180,0,0.45);border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.5rem;display:flex;gap:1rem;align-items:flex-start;">
+  <span style="font-size:1.3rem;line-height:1;">⚠️</span>
+  <div>
+    <strong style="color:#ffb400;">Modo Vercel sem banco de dados</strong>
+    <p style="margin:0.35rem 0 0;font-size:0.85rem;color:var(--muted);line-height:1.5;">
+      As configurações <strong>não serão persistidas</strong> porque o filesystem do Vercel é somente leitura e <code>DATABASE_URL</code> não está configurado.<br>
+      Para salvar permanentemente:
+      <strong>(1)</strong> Crie um banco PostgreSQL (ex.: Vercel Postgres, Supabase ou Neon) e
+      <strong>(2)</strong> adicione <code>DATABASE_URL</code> nas <em>Environment Variables</em> do projeto no painel do Vercel.
+      As <strong>credenciais de API</strong> devem ser adicionadas diretamente no painel do Vercel → Settings → Environment Variables.
+    </p>
+  </div>
+</div>
+{% endif %}
+
 <div class="page-header">
   <h1 class="page-title">Conexões</h1>
   <p class="page-desc">Gerencie credenciais globais e contas de anúncios por produto.</p>
@@ -570,7 +587,7 @@ async function saveEnv(e, _) {
   new FormData(form).forEach((v, k) => { if(v) data[k] = v; });
   const r = await fetch('/api/env/save', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
   const d = await r.json();
-  showToast(d.message || 'Salvo');
+  showToast(d.message || 'Salvo', d.warn ? 'warn' : 'ok');
   setTimeout(() => location.reload(), 900);
 }
 
@@ -595,15 +612,15 @@ async function saveAccount(e, produto) {
   };
   const r = await fetch('/api/accounts/save', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
   const d = await r.json();
-  showToast(d.message || 'Contas salvas');
+  showToast(d.message || 'Contas salvas', d.error ? 'error' : 'ok');
 }
 
 async function removeProduct(nome) {
   if(!confirm(`Remover "${nome}" de accounts.json?`)) return;
   const r = await fetch('/api/accounts/remove', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({nome})});
   const d = await r.json();
-  showToast(d.message || 'Removido');
-  setTimeout(() => location.reload(), 900);
+  showToast(d.message || 'Removido', d.error ? 'error' : 'ok');
+  if (!d.error) setTimeout(() => location.reload(), 900);
 }
 
 function openAddProductModal() {
@@ -630,8 +647,8 @@ async function addProduct(e) {
   };
   const r = await fetch('/api/accounts/save', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
   const d = await r.json();
-  showToast(d.message || 'Produto adicionado');
-  setTimeout(() => location.reload(), 900);
+  showToast(d.message || 'Produto adicionado', d.error ? 'error' : 'ok');
+  if (!d.error) setTimeout(() => location.reload(), 900);
 }
 
 async function importProducts() {

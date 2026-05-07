@@ -226,6 +226,8 @@ async def conexoes(request: Request):
         "request": request, "page": "conexoes",
         "env": _get_env(), "accounts": _load_accounts(),
         "active_product": _active_product, "alert_count": _get_alert_count(),
+        "is_vercel": config_store.IS_VERCEL,
+        "has_db": bool(os.getenv("DATABASE_URL")),
     })
 
 @app.get("/campanhas", response_class=HTMLResponse)
@@ -318,8 +320,12 @@ async def env_save(request: Request):
                 pass
     if not config_store.IS_VERCEL:
         load_dotenv(ENV_PATH, override=True)
-    suffix = " (adicione também no painel do Vercel para persistir)" if config_store.IS_VERCEL else " no .env"
-    return {"message": f"{saved} variável(is) salva(s){suffix}"}
+    if config_store.IS_VERCEL:
+        return {
+            "message": f"{saved} variável(is) ativa(s) nesta sessão — adicione no painel do Vercel (Settings → Environment Variables) para persistir",
+            "warn": True,
+        }
+    return {"message": f"{saved} variável(is) salva(s) no .env"}
 
 
 # ── API: UTM ──────────────────────────────────────────────────────────────────
@@ -533,7 +539,10 @@ async def accounts_save(request: Request):
             "contas": data.get("contas", default_contas),
             "rastreamento": data.get("rastreamento", default_rastreamento),
         })
-    config_store.save("accounts", {"produtos": accounts}, ACCOUNTS_PATH)
+    ok = config_store.save("accounts", {"produtos": accounts}, ACCOUNTS_PATH)
+    if not ok:
+        suffix = " — adicione DATABASE_URL nas variáveis de ambiente do Vercel para persistir" if config_store.IS_VERCEL else ""
+        return JSONResponse({"message": f"Erro ao salvar contas de '{nome}'{suffix}", "error": True}, status_code=500)
     return {"message": f"Contas de '{nome}' salvas"}
 
 
@@ -649,7 +658,9 @@ async def accounts_remove(request: Request):
     data = await request.json()
     nome = data.get("nome", "").strip()
     accounts = [p for p in _load_accounts() if p["nome"] != nome]
-    config_store.save("accounts", {"produtos": accounts}, ACCOUNTS_PATH)
+    ok = config_store.save("accounts", {"produtos": accounts}, ACCOUNTS_PATH)
+    if not ok and config_store.IS_VERCEL:
+        return JSONResponse({"message": "Adicione DATABASE_URL para persistir no Vercel", "error": True}, status_code=500)
     return {"message": f"Produto '{nome}' removido"}
 
 @app.post("/api/health-check")
