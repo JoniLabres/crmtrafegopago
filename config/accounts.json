@@ -8,27 +8,81 @@
           "pixel_id": "",
           "access_token_env": "META_ACCESS_TOKEN"
         },
-        "google": {
-          "customer_id": "",
-          "developer_token_env": "GOOGLE_ADS_DEVELOPER_TOKEN",
-          "refresh_token_env": "GOOGLE_ADS_REFRESH_TOKEN"
-        },
-        "linkedin": {
-          "ad_account_id": "",
-          "partner_id": "",
-          "access_token_env": "LINKEDIN_ACCESS_TOKEN"
-        },
-        "tiktok": {
-          "ad_account_id": "",
-          "pixel_id": "",
-          "access_token_env": "TIKTOK_ACCESS_TOKEN"
-        }
+        "google": { "customer_id": "" },
+        "linkedin": { "ad_account_id": "", "partner_id": "" },
+        "tiktok": { "ad_account_id": "", "pixel_id": "" }
       },
       "rastreamento": {
-        "ga4_measurement_id": "",
-        "ga4_property_id": "",
-        "gtm_public_id": "",
-        "gtm_container_id": ""
+        "ga4_measurement_id": "", "ga4_property_id": "",
+        "gtm_public_id": "", "gtm_container_id": ""
+      }
+    },
+    {
+      "nome": "ixcsoft",
+      "contas": {
+        "meta": {
+          "ad_account_id": "act_1358744461953261",
+          "pixel_id": "",
+          "access_token_env": "META_ACCESS_TOKEN"
+        },
+        "google": { "customer_id": "" },
+        "linkedin": { "ad_account_id": "", "partner_id": "" },
+        "tiktok": { "ad_account_id": "", "pixel_id": "" }
+      },
+      "rastreamento": {
+        "ga4_measurement_id": "", "ga4_property_id": "",
+        "gtm_public_id": "", "gtm_container_id": ""
+      }
+    },
+    {
+      "nome": "ixc-xcale",
+      "contas": {
+        "meta": {
+          "ad_account_id": "act_26003749232612843",
+          "pixel_id": "",
+          "access_token_env": "META_ACCESS_TOKEN"
+        },
+        "google": { "customer_id": "" },
+        "linkedin": { "ad_account_id": "", "partner_id": "" },
+        "tiktok": { "ad_account_id": "", "pixel_id": "" }
+      },
+      "rastreamento": {
+        "ga4_measurement_id": "", "ga4_property_id": "",
+        "gtm_public_id": "", "gtm_container_id": ""
+      }
+    },
+    {
+      "nome": "ixc-academy",
+      "contas": {
+        "meta": {
+          "ad_account_id": "act_912993374979989",
+          "pixel_id": "",
+          "access_token_env": "META_ACCESS_TOKEN"
+        },
+        "google": { "customer_id": "" },
+        "linkedin": { "ad_account_id": "", "partner_id": "" },
+        "tiktok": { "ad_account_id": "", "pixel_id": "" }
+      },
+      "rastreamento": {
+        "ga4_measurement_id": "", "ga4_property_id": "",
+        "gtm_public_id": "", "gtm_container_id": ""
+      }
+    },
+    {
+      "nome": "ixc-provedor",
+      "contas": {
+        "meta": {
+          "ad_account_id": "act_2681610038717738",
+          "pixel_id": "",
+          "access_token_env": "META_ACCESS_TOKEN"
+        },
+        "google": { "customer_id": "" },
+        "linkedin": { "ad_account_id": "", "partner_id": "" },
+        "tiktok": { "ad_account_id": "", "pixel_id": "" }
+      },
+      "rastreamento": {
+        "ga4_measurement_id": "", "ga4_property_id": "",
+        "gtm_public_id": "", "gtm_container_id": ""
       }
     }
   ]
