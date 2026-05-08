@@ -65,7 +65,7 @@ def _load_env_overrides() -> dict:
 def _apply_env_overrides() -> None:
     """Inject DB-persisted env vars into os.environ (called at request time)."""
     for k, v in _load_env_overrides().items():
-        if v and not os.environ.get(k):
+        if v:
             os.environ[k] = v
 
 
@@ -470,9 +470,8 @@ async def alerts_thresholds(request: Request):
 @app.post("/api/pipeline/run")
 async def pipeline_run(request: Request):
     params = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
-    days = int(params.get("days", 7))
     try:
-        from load_database import run_pipeline, _load_accounts, _pull_produto
+        from load_database import run_pipeline, _load_accounts
         from datetime import date, timedelta
 
         # Load DB-persisted env vars before running pipeline
@@ -483,8 +482,14 @@ async def pipeline_run(request: Request):
         if not accounts:
             return JSONResponse({"message": "Nenhum produto em accounts.json. Configure em Conexões → Contas por Produto."}, status_code=400)
 
-        date_to = date.today()
-        date_from = date_to - timedelta(days=days)
+        # Accept either date_from/date_to strings or days integer
+        if params.get("date_from") and params.get("date_to"):
+            date_from = date.fromisoformat(params["date_from"])
+            date_to   = date.fromisoformat(params["date_to"])
+        else:
+            days = int(params.get("days", 7))
+            date_to   = date.today()
+            date_from = date_to - timedelta(days=days)
 
         total = run_pipeline(date_from=date_from, date_to=date_to)
         return {"message": f"Pipeline concluído: {total} campanhas carregadas ({date_from} → {date_to}, {len(accounts)} produto(s))"}

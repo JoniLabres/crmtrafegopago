@@ -502,17 +502,43 @@
 
 <!-- ── Tab: Ações ──────────────────────────────────────────────────────────── -->
 <div id="tab-acoes" class="tab-panel" style="display:none;">
+
+  <!-- Pipeline com seletor de datas -->
+  <div class="panel" style="margin-bottom:1rem;">
+    <div class="panel-head"><h3>Sincronizar dados de mídia</h3></div>
+    <div class="panel-body">
+      <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:0.75rem;">
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:0.8rem;margin-bottom:0.35rem;">Data início</label>
+          <input type="date" id="pipeline-date-from" class="input input-dark" style="width:175px;">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:0.8rem;margin-bottom:0.35rem;">Data fim</label>
+          <input type="date" id="pipeline-date-to" class="input input-dark" style="width:175px;">
+        </div>
+        <button class="btn btn-primary" onclick="runPipeline()" style="height:38px;">Executar Pipeline</button>
+      </div>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" onclick="setDays(7)">Últimos 7 dias</button>
+        <button class="btn btn-ghost btn-sm" onclick="setDays(15)">Últimos 15 dias</button>
+        <button class="btn btn-ghost btn-sm" onclick="setDays(30)">Últimos 30 dias</button>
+        <button class="btn btn-ghost btn-sm" onclick="setDays(90)">Últimos 90 dias</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Outras ações -->
   <div class="panel">
-    <div class="panel-head"><h3>Ações rápidas</h3></div>
+    <div class="panel-head"><h3>Outras ações</h3></div>
     <div class="panel-body" style="display:flex;gap:0.75rem;flex-wrap:wrap;">
       <button class="btn btn-primary" onclick="setupDb()" title="Cria as tabelas no banco PostgreSQL (seguro rodar múltiplas vezes)">🗄️ Configurar banco</button>
       <button class="btn btn-outline" onclick="runHealthCheck()">Health Check</button>
-      <button class="btn btn-ghost" onclick="runPipeline()">Executar Pipeline</button>
       <button class="btn btn-ghost" onclick="createHubSpotProps()">Criar propriedades HubSpot</button>
       <button class="btn btn-ghost" onclick="importProducts()">Importar Produtos HubSpot</button>
     </div>
-    <div id="action-output" style="padding:1rem 1.5rem;font-family:monospace;font-size:0.8rem;color:var(--muted);white-space:pre-wrap;display:none;border-top:1px solid var(--border);margin-top:0.5rem;"></div>
   </div>
+
+  <div id="action-output" style="padding:1rem 1.5rem;font-family:monospace;font-size:0.8rem;color:var(--muted);white-space:pre-wrap;display:none;border:1px solid var(--border);border-radius:8px;margin-top:1rem;background:rgba(0,0,0,0.2);"></div>
 </div>
 
 <!-- ── Modal: Snippet de Rastreamento ────────────────────────────────────── -->
@@ -563,6 +589,9 @@
 .conn-body { display:flex; flex-direction:column; gap:0.75rem; padding:1.25rem; }
 </style>
 <script>
+// Initialize date pickers with last 7 days
+(function(){ setDays(7); })();
+
 // Show OAuth success toast if redirected back from OAuth
 (function(){
   const p = new URLSearchParams(location.search);
@@ -754,15 +783,29 @@ async function runHealthCheck() {
   const d = await r.json();
   out.textContent = d.output;
 }
+function setDays(n) {
+  const to = new Date();
+  const from = new Date();
+  from.setDate(from.getDate() - n);
+  document.getElementById('pipeline-date-to').value = to.toISOString().split('T')[0];
+  document.getElementById('pipeline-date-from').value = from.toISOString().split('T')[0];
+}
+
 async function runPipeline() {
-  const days = prompt('Quantos dias de histórico puxar?', '7');
-  if (days === null) return;
+  const from = document.getElementById('pipeline-date-from').value;
+  const to   = document.getElementById('pipeline-date-to').value;
+  if (!from || !to) { showToast('Selecione o período antes de executar', 'warn'); return; }
   const out = document.getElementById('action-output');
-  out.style.display = 'block'; out.textContent = `Executando pipeline (últimos ${days} dias)...`;
-  const r = await fetch('/api/pipeline/run', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({days: parseInt(days)||7})});
-  const d = await r.json();
-  out.textContent = d.message;
-  showToast(d.message, d.error ? 'error' : 'ok');
+  out.style.display = 'block'; out.textContent = `Executando pipeline (${from} → ${to})...`;
+  try {
+    const r = await fetch('/api/pipeline/run', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({date_from: from, date_to: to})});
+    const d = await r.json();
+    out.textContent = d.message;
+    showToast(d.message, r.ok ? 'ok' : 'error');
+  } catch(e) {
+    out.textContent = 'Erro de rede: ' + e.message;
+    showToast('Erro de rede', 'error');
+  }
 }
 async function createHubSpotProps() {
   const out = document.getElementById('action-output');
