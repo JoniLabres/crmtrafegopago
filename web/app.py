@@ -559,8 +559,28 @@ async def agent_set_product(request: Request):
 @app.post("/api/agent/chat")
 async def agent_chat(request: Request):
     global _agent_instance, _active_product
-    d = await request.json()
-    message = d.get("message","")
+
+    # Accept both JSON and multipart/form-data (for creative uploads)
+    content_type = request.headers.get("content-type", "")
+    creative_path: str = None
+    creative_name: str = None
+
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        message = form.get("message", "")
+        creative_file = form.get("creative")
+        if creative_file and hasattr(creative_file, "filename"):
+            import tempfile, shutil
+            suffix = "." + creative_file.filename.rsplit(".", 1)[-1].lower()
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+            shutil.copyfileobj(creative_file.file, tmp)
+            tmp.close()
+            creative_path = tmp.name
+            creative_name = creative_file.filename
+    else:
+        d = await request.json()
+        message = d.get("message", "")
+
     try:
         from agent import CampaignAgent
         from briefing import _parse_objetivo, _parse_canal, _parse_budget
@@ -569,6 +589,13 @@ async def agent_chat(request: Request):
 
         if _agent_instance is None:
             _agent_instance = CampaignAgent()
+
+        # Inject creative context into the message if a file was uploaded
+        if creative_path and creative_name:
+            message = (
+                f"{message}\n\n[CRIATIVO ANEXADO: {creative_name} | caminho_temp: {creative_path}]"
+                "\nUse as ferramentas meta_upload_image ou meta_upload_video com esse caminho quando for criar o anúncio."
+            )
 
         if message.startswith("/diagnostico"):
             if not _active_product:
@@ -597,6 +624,14 @@ async def agent_chat(request: Request):
     except Exception as e:
         logger.error("Agent error: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
+    finally:
+        # Clean up temp file
+        if creative_path:
+            try:
+                import os as _os
+                _os.unlink(creative_path)
+            except Exception:
+                pass
 
 @app.post("/api/agent/reset")
 async def agent_reset():

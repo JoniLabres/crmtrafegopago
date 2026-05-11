@@ -9,6 +9,30 @@
   .agent-top-left h2 { font-size: 1rem; font-weight: 700; }
   .agent-top-left p  { font-size: 0.8rem; color: var(--muted); }
   .product-selector { display: flex; align-items: center; gap: 0.75rem; }
+
+  /* Creative preview bar */
+  #creative-preview {
+    display: none;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 1.25rem;
+    background: rgba(185,255,0,0.06);
+    border-top: 1px solid var(--border);
+    font-size: 0.8rem;
+    flex-shrink: 0;
+  }
+  #creative-preview img { height: 48px; width: 48px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
+  #creative-preview video { height: 48px; width: 80px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
+  .creative-info { flex: 1; }
+  .creative-info strong { color: var(--primary); display: block; }
+  .creative-info span { color: var(--muted); }
+  .btn-remove-creative { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1rem; padding: 0.25rem; line-height: 1; }
+  .btn-remove-creative:hover { color: var(--danger); }
+
+  /* attach button */
+  .btn-attach { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 8px; padding: 0.5rem 0.6rem; cursor: pointer; display: flex; align-items: center; transition: border-color .2s, color .2s; }
+  .btn-attach:hover { border-color: var(--primary); color: var(--primary); }
+  .btn-attach.has-file { border-color: var(--primary); color: var(--primary); }
 </style>
 {% endblock %}
 
@@ -49,7 +73,24 @@ Selecione um produto no topo e use os chips abaixo para começar.</div>
     <span class="cmd-chip" onclick="sendCmd('/prever 5000')">/prever R$5.000</span>
   </div>
 
+  <!-- Creative preview bar (shown when file is attached) -->
+  <div id="creative-preview">
+    <div id="creative-thumb"></div>
+    <div class="creative-info">
+      <strong id="creative-name"></strong>
+      <span id="creative-size"></span>
+    </div>
+    <button class="btn-remove-creative" onclick="removeCreative()" title="Remover criativo">✕</button>
+  </div>
+
   <div class="chat-input-row">
+    <!-- Hidden file input -->
+    <input type="file" id="creative-file" accept="image/jpeg,image/png,image/gif,video/mp4,video/quicktime,video/avi"
+           style="display:none;" onchange="onCreativeSelected(this)">
+    <!-- Attach button -->
+    <button class="btn-attach" id="attach-btn" onclick="document.getElementById('creative-file').click()" title="Anexar criativo (imagem ou vídeo)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+    </button>
     <textarea id="chat-input" rows="1" placeholder="Faça uma pergunta ou use um /comando..." onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
     <button class="btn btn-primary" id="send-btn" onclick="sendMessage()">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -61,6 +102,7 @@ Selecione um produto no topo e use os chips abaixo para começar.</div>
 {% block scripts %}
 <script>
 let isLoading = false;
+let attachedFile = null;
 
 async function setProduct(name) {
   if (!name) return;
@@ -71,31 +113,68 @@ async function setProduct(name) {
   appendMsg('agent', `Produto **${name}** carregado. Contexto e métricas atualizados.`);
 }
 
+function onCreativeSelected(input) {
+  const file = input.files[0];
+  if (!file) return;
+  attachedFile = file;
+  const isVideo = file.type.startsWith('video/');
+  const thumb = document.getElementById('creative-thumb');
+  const url = URL.createObjectURL(file);
+  thumb.innerHTML = isVideo
+    ? `<video src="${url}" muted></video>`
+    : `<img src="${url}" alt="preview">`;
+  document.getElementById('creative-name').textContent = file.name;
+  document.getElementById('creative-size').textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB · ' + (isVideo ? 'vídeo' : 'imagem');
+  document.getElementById('creative-preview').style.display = 'flex';
+  document.getElementById('attach-btn').classList.add('has-file');
+}
+
+function removeCreative() {
+  attachedFile = null;
+  document.getElementById('creative-file').value = '';
+  document.getElementById('creative-preview').style.display = 'none';
+  document.getElementById('attach-btn').classList.remove('has-file');
+}
+
 async function sendMessage() {
   const input = document.getElementById('chat-input');
   const msg = input.value.trim();
   if (!msg || isLoading) return;
   input.value = '';
   autoResize(input);
-  appendMsg('user', msg);
-  await callAgent(msg);
+  const fileRef = attachedFile;
+  removeCreative();
+  if (fileRef) {
+    appendMsg('user', `${msg}\n📎 ${fileRef.name}`);
+  } else {
+    appendMsg('user', msg);
+  }
+  await callAgent(msg, fileRef);
 }
 
 async function sendCmd(cmd) {
   appendMsg('user', cmd);
-  await callAgent(cmd);
+  await callAgent(cmd, null);
 }
 
-async function callAgent(message) {
+async function callAgent(message, file) {
   isLoading = true;
   document.getElementById('send-btn').disabled = true;
-  const thinking = appendMsg('agent', '...', true);
+  const thinking = appendMsg('agent', '⏳ Processando...', true);
   try {
-    const r = await fetch('/api/agent/chat', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({message})
-    });
+    let r;
+    if (file) {
+      const fd = new FormData();
+      fd.append('message', message);
+      fd.append('creative', file, file.name);
+      r = await fetch('/api/agent/chat', {method: 'POST', body: fd});
+    } else {
+      r = await fetch('/api/agent/chat', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({message})
+      });
+    }
     const d = await r.json();
     thinking.remove();
     if (d.reply) appendMsg('agent', d.reply);

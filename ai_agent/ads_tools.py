@@ -315,6 +315,107 @@ def google_update_campaign_status(product: str, campaign_id: str, status: str) -
             "message": f"Campanha {campaign_id} → {s}"}
 
 
+# ── META ADS CREATIVE TOOLS ──────────────────────────────────────────────────
+
+def meta_upload_image(product: str, file_path: str) -> dict:
+    """Faz upload de uma imagem para o Meta Ads e retorna o image_hash necessário para criar anúncios."""
+    account_id = _meta_account(product)
+    if not account_id:
+        return {"error": f"Conta Meta não configurada para '{product}'"}
+    import pathlib
+    p = pathlib.Path(file_path)
+    if not p.exists():
+        return {"error": f"Arquivo não encontrado: {file_path}"}
+    with open(file_path, "rb") as f:
+        r = requests.post(
+            f"{META_BASE}/{account_id}/adimages",
+            data={"access_token": _meta_token()},
+            files={"filename": (p.name, f, "image/jpeg")},
+            timeout=60,
+        )
+    if not r.ok:
+        return {"error": r.json().get("error", {}).get("message", r.text[:300])}
+    images = r.json().get("images", {})
+    image_hash = list(images.values())[0].get("hash", "") if images else ""
+    return {"success": True, "image_hash": image_hash, "file": p.name,
+            "message": f"Imagem '{p.name}' enviada. Hash: {image_hash}"}
+
+
+def meta_upload_video(product: str, file_path: str) -> dict:
+    """Faz upload de um vídeo para o Meta Ads e retorna o video_id necessário para criar anúncios."""
+    account_id = _meta_account(product)
+    if not account_id:
+        return {"error": f"Conta Meta não configurada para '{product}'"}
+    import pathlib
+    p = pathlib.Path(file_path)
+    if not p.exists():
+        return {"error": f"Arquivo não encontrado: {file_path}"}
+    with open(file_path, "rb") as f:
+        r = requests.post(
+            f"{META_BASE}/{account_id}/advideos",
+            data={"access_token": _meta_token(), "title": p.stem},
+            files={"source": (p.name, f, "video/mp4")},
+            timeout=120,
+        )
+    if not r.ok:
+        return {"error": r.json().get("error", {}).get("message", r.text[:300])}
+    video_id = r.json().get("id", "")
+    return {"success": True, "video_id": video_id, "file": p.name,
+            "message": f"Vídeo '{p.name}' enviado. ID: {video_id}"}
+
+
+def meta_create_ad(product: str, adset_id: str, headline: str, body: str,
+                   link_url: str, cta: str = "LEARN_MORE",
+                   image_hash: str = None, video_id: str = None) -> dict:
+    """Cria um anúncio completo no Meta Ads com criativo (imagem ou vídeo). Sempre cria com status PAUSED."""
+    account_id = _meta_account(product)
+    if not account_id:
+        return {"error": f"Conta Meta não configurada para '{product}'"}
+    if not image_hash and not video_id:
+        return {"error": "Informe image_hash (imagem) ou video_id (vídeo)"}
+
+    # Monta o creative
+    if image_hash:
+        story = {"link_data": {
+            "link": link_url,
+            "message": body,
+            "name": headline,
+            "call_to_action": {"type": cta},
+            "image_hash": image_hash,
+        }}
+    else:
+        story = {"video_data": {
+            "video_id": video_id,
+            "title": headline,
+            "message": body,
+            "call_to_action": {"type": cta, "value": {"link": link_url}},
+        }}
+
+    cr = requests.post(f"{META_BASE}/{account_id}/adcreatives", data={
+        "access_token": _meta_token(),
+        "name": f"criativo_{headline[:40]}",
+        "object_story_spec": json.dumps(story),
+    }, timeout=20)
+    if not cr.ok:
+        return {"error": f"Erro ao criar creative: {cr.json().get('error',{}).get('message', cr.text[:200])}"}
+    creative_id = cr.json().get("id", "")
+
+    # Cria o anúncio
+    ad_r = requests.post(f"{META_BASE}/{account_id}/ads", data={
+        "access_token": _meta_token(),
+        "name": headline[:80],
+        "adset_id": adset_id,
+        "creative": json.dumps({"creative_id": creative_id}),
+        "status": "PAUSED",
+    }, timeout=20)
+    if not ad_r.ok:
+        return {"error": f"Erro ao criar anúncio: {ad_r.json().get('error',{}).get('message', ad_r.text[:200])}"}
+    ad_id = ad_r.json().get("id", "")
+    return {"success": True, "ad_id": ad_id, "creative_id": creative_id,
+            "status": "PAUSED",
+            "message": f"Anúncio '{headline[:60]}' criado (pausado para revisão). ID: {ad_id}"}
+
+
 # ── TOOL DEFINITIONS (Anthropic format) ──────────────────────────────────────
 
 TOOLS = [
@@ -373,6 +474,48 @@ TOOLS = [
         },
     },
     {
+        "name": "meta_upload_image",
+        "description": "Faz upload de uma imagem (JPG/PNG) para o Meta Ads e retorna o image_hash. Use o caminho_temp do arquivo anexado pelo usuário.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "product":   {"type": "string", "description": "Nome do produto"},
+                "file_path": {"type": "string", "description": "Caminho local do arquivo de imagem (caminho_temp recebido na mensagem)"},
+            },
+            "required": ["product", "file_path"],
+        },
+    },
+    {
+        "name": "meta_upload_video",
+        "description": "Faz upload de um vídeo (MP4/MOV) para o Meta Ads e retorna o video_id. Use o caminho_temp do arquivo anexado pelo usuário.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "product":   {"type": "string", "description": "Nome do produto"},
+                "file_path": {"type": "string", "description": "Caminho local do arquivo de vídeo (caminho_temp recebido na mensagem)"},
+            },
+            "required": ["product", "file_path"],
+        },
+    },
+    {
+        "name": "meta_create_ad",
+        "description": "Cria um anúncio completo no Meta Ads com criativo (imagem ou vídeo). Sempre cria pausado. Use após upload do criativo e com adset_id definido.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "product":    {"type": "string", "description": "Nome do produto"},
+                "adset_id":   {"type": "string", "description": "ID do conjunto de anúncios"},
+                "headline":   {"type": "string", "description": "Título do anúncio (máx 80 chars)"},
+                "body":       {"type": "string", "description": "Texto do anúncio"},
+                "link_url":   {"type": "string", "description": "URL de destino"},
+                "cta":        {"type": "string", "description": "Call to action: LEARN_MORE, SIGN_UP, GET_QUOTE, CONTACT_US, DOWNLOAD"},
+                "image_hash": {"type": "string", "description": "Hash da imagem (retornado por meta_upload_image)"},
+                "video_id":   {"type": "string", "description": "ID do vídeo (retornado por meta_upload_video)"},
+            },
+            "required": ["product", "adset_id", "headline", "body", "link_url"],
+        },
+    },
+    {
         "name": "google_list_campaigns",
         "description": "Lista campanhas do Google Ads de um produto com métricas de performance (spend, conversões, CPL, CTR, CPC).",
         "input_schema": {
@@ -418,6 +561,9 @@ TOOL_FUNCTIONS = {
     "meta_update_campaign":          meta_update_campaign,
     "meta_get_adsets":               meta_get_adsets,
     "meta_create_campaign":          meta_create_campaign,
+    "meta_upload_image":             meta_upload_image,
+    "meta_upload_video":             meta_upload_video,
+    "meta_create_ad":                meta_create_ad,
     "google_list_campaigns":         google_list_campaigns,
     "google_update_campaign_budget": google_update_campaign_budget,
     "google_update_campaign_status": google_update_campaign_status,
