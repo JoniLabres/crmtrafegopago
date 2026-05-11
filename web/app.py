@@ -15,6 +15,7 @@ from fastapi.templating import Jinja2Templates
 from dotenv import load_dotenv, set_key
 
 import config_store
+from config_store import get_db_url
 
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT / "tracking"))
@@ -128,7 +129,7 @@ def _save_last_sync(total: int, date_from, date_to) -> None:
 def _get_dashboard_data(days: int = 30, produto: str = ""):
     try:
         import psycopg2
-        conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+        conn = psycopg2.connect(get_db_url())
 
         # Build optional produto filter fragment
         p_filter = "AND produto = %s" if produto else ""
@@ -196,7 +197,7 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
 def _get_alert_count():
     try:
         import psycopg2
-        conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+        conn = psycopg2.connect(get_db_url())
         with conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM alerts_log WHERE sent_at >= NOW() - INTERVAL '48 hours' AND severity = 'critico'")
             count = cur.fetchone()[0]
@@ -262,7 +263,7 @@ async def conexoes(request: Request):
         "env": _get_env(), "accounts": _load_accounts(),
         "active_product": _active_product, "alert_count": _get_alert_count(),
         "is_vercel": config_store.IS_VERCEL,
-        "has_db": bool(os.getenv("DATABASE_URL")),
+        "has_db": bool(get_db_url()),
     })
 
 @app.get("/campanhas", response_class=HTMLResponse)
@@ -271,7 +272,7 @@ async def campanhas(request: Request):
     all_campaigns = data["top_campaigns"]
     try:
         import psycopg2
-        conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+        conn = psycopg2.connect(get_db_url())
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT campaign_utm, channel, produto,
@@ -299,7 +300,7 @@ async def alertas(request: Request):
     alerts, stats = [], {"total":0,"critico":0,"atencao":0,"ok":0}
     try:
         import psycopg2
-        conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+        conn = psycopg2.connect(get_db_url())
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT alert_type, severity, message, sent_at::text, campaign_utm, produto
@@ -357,7 +358,7 @@ async def env_save(request: Request):
         load_dotenv(ENV_PATH, override=True)
 
     # Persist to DB so vars survive across serverless invocations
-    if os.getenv("DATABASE_URL"):
+    if get_db_url():
         existing = _load_env_overrides()
         for key, value in data.items():
             if value:
@@ -782,7 +783,7 @@ async def pipeline_debug():
     accounts = _load_accounts()
     meta_token = os.getenv("META_ACCESS_TOKEN", "")
     meta_account = os.getenv("META_AD_ACCOUNT_ID", "")
-    db_url = os.getenv("DATABASE_URL", "")
+    db_url = get_db_url()
     return {
         "python": _sys.version,
         "is_vercel": config_store.IS_VERCEL,
@@ -803,9 +804,9 @@ async def pipeline_debug():
 @app.post("/api/db/setup")
 async def db_setup():
     """Create all tables from schema.sql. Safe to run multiple times (CREATE IF NOT EXISTS)."""
-    db_url = os.getenv("DATABASE_URL", "")
+    db_url = get_db_url()
     if not db_url:
-        return JSONResponse({"message": "DATABASE_URL não configurada", "error": True}, status_code=400)
+        return JSONResponse({"message": "Banco não configurado (DATABASE_URL / POSTGRES_URL ausente)", "error": True}, status_code=400)
     schema_path = ROOT / "dashboard" / "schema.sql"
     if not schema_path.exists():
         return JSONResponse({"message": "schema.sql não encontrado", "error": True}, status_code=500)

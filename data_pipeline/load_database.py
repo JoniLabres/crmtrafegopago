@@ -73,10 +73,18 @@ def _load_accounts() -> list:
     return data.get("produtos", []) if isinstance(data, dict) else []
 
 
+def _get_db_url() -> str:
+    for key in ("DATABASE_URL", "POSTGRES_URL_NON_POOLING", "POSTGRES_URL", "POSTGRES_PRISMA_URL"):
+        val = os.getenv(key, "")
+        if val:
+            return val
+    return ""
+
+
 def _get_connection():
-    database_url = os.getenv("DATABASE_URL")
+    database_url = _get_db_url()
     if not database_url:
-        raise EnvironmentError("DATABASE_URL não configurada")
+        raise EnvironmentError("Banco não configurado — defina DATABASE_URL ou POSTGRES_URL")
     return psycopg2.connect(database_url)
 
 

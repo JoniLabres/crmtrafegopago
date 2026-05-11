@@ -18,12 +18,27 @@ logger = logging.getLogger(__name__)
 # Vercel sets this env var automatically in all deployments
 IS_VERCEL = bool(os.getenv("VERCEL"))
 
+# Vercel Postgres injects POSTGRES_URL (not DATABASE_URL). Accept both.
+_DB_URL_KEYS = ["DATABASE_URL", "POSTGRES_URL_NON_POOLING", "POSTGRES_URL", "POSTGRES_PRISMA_URL"]
+
+
+def get_db_url() -> str:
+    """Return the first non-empty Postgres connection string found in the environment."""
+    for key in _DB_URL_KEYS:
+        val = os.getenv(key, "")
+        if val:
+            return val
+    return ""
+
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _db_conn():
     import psycopg2
-    return psycopg2.connect(os.getenv("DATABASE_URL", ""))
+    url = get_db_url()
+    if not url:
+        raise RuntimeError("Nenhuma variável de banco configurada (DATABASE_URL / POSTGRES_URL)")
+    return psycopg2.connect(url)
 
 
 def _ensure_table(conn) -> None:
@@ -43,7 +58,7 @@ def _ensure_table(conn) -> None:
 def load(key: str, fallback_path: Path | None = None, default=None):
     """Load a config blob: tries PostgreSQL, falls back to JSON file."""
     # 1. PostgreSQL
-    db_url = os.getenv("DATABASE_URL", "")
+    db_url = get_db_url()
     if db_url:
         try:
             conn = _db_conn()
@@ -78,7 +93,7 @@ def save(key: str, value, fallback_path: Path | None = None) -> bool:
     ok = False
 
     # 1. PostgreSQL
-    db_url = os.getenv("DATABASE_URL", "")
+    db_url = get_db_url()
     if db_url:
         try:
             conn = _db_conn()

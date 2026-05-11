@@ -78,29 +78,38 @@
         </div>
       </div>
       <div class="conn-body">
+        <div style="background:rgba(163,255,0,0.07);border:1px solid rgba(163,255,0,0.2);border-radius:8px;padding:0.75rem 1rem;font-size:0.8rem;line-height:1.5;color:var(--muted);">
+          <strong style="color:var(--text);">Tem System User Token?</strong> Cole direto no campo <em>Access Token</em> abaixo e clique <strong>Salvar manualmente</strong> — sem precisar do botão de OAuth.<br>
+          O botão "Conectar com Facebook" só funciona se você tiver um <strong>Meta App</strong> com <em>Client ID</em> e <em>Client Secret</em> configurados.
+        </div>
         <a href="/auth/connect/meta" class="btn btn-oauth" style="background:#1877f2;color:#fff;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:0.5rem;padding:0.55rem 1rem;border-radius:8px;font-size:0.9rem;font-weight:600;">
           <svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px;"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-          Conectar com Facebook
+          Conectar com Facebook (requer Meta App)
         </a>
         <div class="oauth-divider">ou configure manualmente</div>
         <form onsubmit="saveEnv(event, 'meta')" style="display:contents;">
           <div class="form-group">
-            <label>Client ID (App ID)</label>
-            <input name="META_CLIENT_ID" class="input input-dark" placeholder="000000000000000" value="{{ env.META_CLIENT_ID or '' }}">
-          </div>
-          <div class="form-group">
-            <label>Client Secret</label>
-            <input name="META_CLIENT_SECRET" class="input input-dark" type="password" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" value="{{ env.META_CLIENT_SECRET or '' }}">
-          </div>
-          <div class="form-group">
-            <label>Access Token</label>
+            <label>Access Token <span style="color:var(--primary);font-size:0.75rem;">(System User Token ou OAuth token)</span></label>
             <input name="META_ACCESS_TOKEN" class="input input-dark" type="password" placeholder="EAAxxxxxxx" value="{{ env.META_ACCESS_TOKEN or '' }}">
           </div>
           <div class="form-group">
             <label>Pixel ID</label>
             <input name="META_PIXEL_ID" class="input input-dark" placeholder="000000000000000" value="{{ env.META_PIXEL_ID or '' }}">
           </div>
-          <button type="submit" class="btn btn-outline btn-sm" style="align-self:flex-end;">Salvar manualmente</button>
+          <details style="margin-top:0.25rem;">
+            <summary style="font-size:0.8rem;color:var(--muted);cursor:pointer;user-select:none;">Configurações avançadas (Meta App para OAuth)</summary>
+            <div style="display:flex;flex-direction:column;gap:0.75rem;margin-top:0.75rem;">
+              <div class="form-group" style="margin:0;">
+                <label>Client ID (App ID)</label>
+                <input name="META_CLIENT_ID" class="input input-dark" placeholder="000000000000000" value="{{ env.META_CLIENT_ID or '' }}">
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label>Client Secret</label>
+                <input name="META_CLIENT_SECRET" class="input input-dark" type="password" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" value="{{ env.META_CLIENT_SECRET or '' }}">
+              </div>
+            </div>
+          </details>
+          <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end;margin-top:0.5rem;">Salvar</button>
         </form>
       </div>
     </div>
