@@ -1108,6 +1108,182 @@ async def pipeline_debug():
     }
 
 
+@app.get("/api/debug/compare")
+async def debug_compare(date_from: str = None, date_to: str = None):
+    """
+    Compara spend/impressions/clicks do banco vs. APIs diretas (Meta + Google) por produto.
+    Uso: /api/debug/compare?date_from=2026-05-01&date_to=2026-05-11
+    """
+    _apply_env_overrides()
+    from datetime import date as _date, timedelta as _td
+    import requests as _req
+
+    if not date_from:
+        date_from = str(_date.today() - _td(days=6))
+    if not date_to:
+        date_to = str(_date.today())
+
+    result = {"period": f"{date_from} → {date_to}", "db": {}, "meta_api": {}, "google_api": {}, "diff": {}}
+
+    # ── 1. Banco ──────────────────────────────────────────────────────────────
+    try:
+        import psycopg2
+        conn = psycopg2.connect(get_db_url())
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT produto, channel,
+                       ROUND(SUM(spend)::numeric,2)  AS spend,
+                       SUM(impressions)               AS impressions,
+                       SUM(clicks)                    AS clicks,
+                       SUM(leads)                     AS leads,
+                       COUNT(DISTINCT campaign_utm)   AS campanhas
+                FROM campaigns_daily
+                WHERE date BETWEEN %s AND %s
+                GROUP BY produto, channel
+                ORDER BY produto, channel
+            """, (date_from, date_to))
+            for row in cur.fetchall():
+                key = f"{row[0]}/{row[1]}"
+                result["db"][key] = {
+                    "produto": row[0], "channel": row[1],
+                    "spend": float(row[2]), "impressions": int(row[3]),
+                    "clicks": int(row[4]), "leads": int(row[5]),
+                    "campanhas": int(row[6]),
+                }
+        conn.close()
+    except Exception as e:
+        result["db_error"] = str(e)
+
+    # ── 2. Meta Ads API direta ────────────────────────────────────────────────
+    accounts = _load_accounts()
+    meta_token = os.getenv("META_ACCESS_TOKEN", "")
+    if meta_token:
+        for prod in accounts:
+            nome = prod.get("nome", "")
+            acc_id = prod.get("contas", {}).get("meta", {}).get("ad_account_id", "")
+            if not acc_id:
+                continue
+            try:
+                r = _req.get(
+                    f"https://graph.facebook.com/v21.0/{acc_id}/insights",
+                    params={
+                        "access_token": meta_token,
+                        "level": "account",
+                        "fields": "spend,impressions,clicks,actions",
+                        "time_range": json.dumps({"since": date_from, "until": date_to}),
+                    }, timeout=20,
+                )
+                if r.ok:
+                    data = r.json().get("data", [{}])
+                    d = data[0] if data else {}
+                    actions = d.get("actions", [])
+                    leads = sum(int(float(a.get("value", 0))) for a in actions
+                                if a.get("action_type") in ("lead","omni_lead","complete_registration"))
+                    result["meta_api"][nome] = {
+                        "account_id": acc_id,
+                        "spend": float(d.get("spend", 0)),
+                        "impressions": int(d.get("impressions", 0)),
+                        "clicks": int(d.get("clicks", 0)),
+                        "leads": leads,
+                    }
+                else:
+                    result["meta_api"][nome] = {"account_id": acc_id, "error": r.json().get("error", {}).get("message", r.text[:200])}
+            except Exception as e:
+                result["meta_api"][nome] = {"account_id": acc_id, "error": str(e)}
+
+    # ── 3. Google Ads API direta ──────────────────────────────────────────────
+    dev_token    = os.getenv("GOOGLE_ADS_DEVELOPER_TOKEN", "")
+    client_id    = os.getenv("GOOGLE_ADS_CLIENT_ID", "")
+    client_sec   = os.getenv("GOOGLE_ADS_CLIENT_SECRET", "")
+    ref_token    = os.getenv("GOOGLE_ADS_REFRESH_TOKEN", "")
+    mcc_id       = os.getenv("GOOGLE_ADS_CUSTOMER_ID", "").replace("-", "")
+
+    if dev_token and ref_token:
+        try:
+            tr = _req.post("https://oauth2.googleapis.com/token", data={
+                "client_id": client_id, "client_secret": client_sec,
+                "refresh_token": ref_token, "grant_type": "refresh_token",
+            }, timeout=15)
+            access_token = tr.json().get("access_token", "") if tr.ok else ""
+        except Exception:
+            access_token = ""
+
+        if access_token:
+            for prod in accounts:
+                nome = prod.get("nome", "")
+                cid  = prod.get("contas", {}).get("google", {}).get("customer_id", "").replace("-", "")
+                if not cid:
+                    continue
+                try:
+                    query = f"""
+                        SELECT metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions
+                        FROM campaign
+                        WHERE segments.date BETWEEN '{date_from}' AND '{date_to}'
+                          AND campaign.status != 'REMOVED'
+                          AND metrics.cost_micros > 0
+                    """
+                    headers = {
+                        "Authorization": f"Bearer {access_token}",
+                        "developer-token": dev_token,
+                    }
+                    if mcc_id and mcc_id != cid:
+                        headers["login-customer-id"] = mcc_id
+                    r = _req.post(
+                        f"https://googleads.googleapis.com/v20/customers/{cid}/googleAds:searchStream",
+                        json={"query": query}, headers=headers, timeout=20,
+                    )
+                    if r.ok:
+                        spend = impressions = clicks = conversions = 0
+                        for batch in r.json():
+                            for row in batch.get("results", []):
+                                m = row.get("metrics", {})
+                                spend       += int(m.get("costMicros", 0))
+                                impressions += int(m.get("impressions", 0))
+                                clicks      += int(m.get("clicks", 0))
+                                conversions += float(m.get("conversions", 0))
+                        result["google_api"][nome] = {
+                            "customer_id": cid,
+                            "spend": round(spend / 1_000_000, 2),
+                            "impressions": impressions,
+                            "clicks": clicks,
+                            "conversions": int(conversions),
+                        }
+                    else:
+                        result["google_api"][nome] = {"customer_id": cid, "error": r.text[:300]}
+                except Exception as e:
+                    result["google_api"][nome] = {"customer_id": cid, "error": str(e)}
+
+    # ── 4. Diff banco vs API ──────────────────────────────────────────────────
+    for nome, api_data in result["meta_api"].items():
+        db_key = f"{nome}/meta"
+        db_data = result["db"].get(db_key, {})
+        api_spend = api_data.get("spend", 0)
+        db_spend  = db_data.get("spend", 0)
+        if isinstance(api_spend, (int, float)) and isinstance(db_spend, (int, float)):
+            diff = round(api_spend - db_spend, 2)
+            pct  = round(diff / api_spend * 100, 1) if api_spend else 0
+            result["diff"][f"{nome}/meta"] = {
+                "api_spend": api_spend, "db_spend": db_spend,
+                "diff": diff, "diff_pct": f"{pct}%",
+                "status": "✅ ok" if abs(pct) < 1 else "⚠️ divergente",
+            }
+    for nome, api_data in result["google_api"].items():
+        db_key = f"{nome}/google"
+        db_data = result["db"].get(db_key, {})
+        api_spend = api_data.get("spend", 0)
+        db_spend  = db_data.get("spend", 0)
+        if isinstance(api_spend, (int, float)) and isinstance(db_spend, (int, float)):
+            diff = round(api_spend - db_spend, 2)
+            pct  = round(diff / api_spend * 100, 1) if api_spend else 0
+            result["diff"][f"{nome}/google"] = {
+                "api_spend": api_spend, "db_spend": db_spend,
+                "diff": diff, "diff_pct": f"{pct}%",
+                "status": "✅ ok" if abs(pct) < 1 else "⚠️ divergente",
+            }
+
+    return result
+
+
 @app.get("/api/db/test")
 async def db_test():
     """Diagnoses the database connection and shows what URL is being used."""
