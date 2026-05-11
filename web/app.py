@@ -156,17 +156,30 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
             cur.execute(f"""
                 SELECT COALESCE(SUM(spend),0), COALESCE(SUM(leads),0),
                        COALESCE(SUM(revenue),0), COALESCE(COUNT(DISTINCT channel),0),
-                       COALESCE(AVG(roas),0)
+                       COALESCE(AVG(roas),0),
+                       COALESCE(SUM(impressions),0), COALESCE(SUM(clicks),0)
                 FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
             """, params_base)
-            spend, leads, revenue, channels, roas = cur.fetchone()
+            spend, leads, revenue, channels, roas, impressions, clicks = cur.fetchone()
 
             cur.execute(f"""
                 SELECT channel,
                        COALESCE(ROUND(SUM(spend)::numeric,2), 0) AS spend,
                        COALESCE(SUM(leads), 0) AS leads,
-                       COALESCE(ROUND(AVG(roas)::numeric,2), 0) AS roas,
-                       COALESCE(ROUND(AVG(NULLIF(cpl,0))::numeric,2), 0) AS cpl
+                       COALESCE(SUM(impressions), 0) AS impressions,
+                       COALESCE(SUM(clicks), 0) AS clicks,
+                       COALESCE(ROUND(
+                           CASE WHEN SUM(spend)>0 THEN SUM(revenue)/SUM(spend) ELSE 0 END
+                       ::numeric,2), 0) AS roas,
+                       COALESCE(ROUND(
+                           CASE WHEN SUM(leads)>0 THEN SUM(spend)/SUM(leads) ELSE 0 END
+                       ::numeric,2), 0) AS cpl,
+                       COALESCE(ROUND(
+                           CASE WHEN SUM(clicks)>0 THEN SUM(spend)/SUM(clicks) ELSE 0 END
+                       ::numeric,4), 0) AS cpc,
+                       COALESCE(ROUND(
+                           CASE WHEN SUM(impressions)>0 THEN SUM(clicks)::numeric/SUM(impressions) ELSE 0 END
+                       ::numeric,4), 0) AS ctr
                 FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
                 GROUP BY channel ORDER BY spend DESC
             """, params_base)
@@ -174,15 +187,21 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
             by_channel = [dict(zip(cols, r)) for r in cur.fetchall()]
 
             cur.execute(f"""
-                SELECT campaign_utm, channel, produto,
+                SELECT campaign_utm, MAX(campaign_name) AS campaign_name, channel, produto,
                        COALESCE(ROUND(SUM(spend)::numeric,2), 0) AS spend,
                        COALESCE(SUM(leads), 0) AS leads,
+                       COALESCE(SUM(impressions), 0) AS impressions,
+                       COALESCE(SUM(clicks), 0) AS clicks,
                        COALESCE(ROUND(SUM(revenue)::numeric,2), 0) AS revenue,
-                       COALESCE(ROUND(AVG(roas)::numeric,2), 0) AS roas,
-                       COALESCE(ROUND(AVG(NULLIF(cpl,0))::numeric,2), 0) AS cpl
+                       COALESCE(ROUND(
+                           CASE WHEN SUM(spend)>0 THEN SUM(revenue)/SUM(spend) ELSE 0 END
+                       ::numeric,2), 0) AS roas,
+                       COALESCE(ROUND(
+                           CASE WHEN SUM(leads)>0 THEN SUM(spend)/SUM(leads) ELSE 0 END
+                       ::numeric,2), 0) AS cpl
                 FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
                 GROUP BY campaign_utm, channel, produto
-                ORDER BY roas DESC LIMIT 10
+                ORDER BY spend DESC LIMIT 10
             """, params_base)
             cols = [d[0] for d in cur.description]
             top_campaigns = [dict(zip(cols, r)) for r in cur.fetchall()]
@@ -199,10 +218,14 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
         conn.close()
         cpl = round(spend / leads, 2) if leads else 0
         mer = round(revenue / spend, 2) if spend > 0 else 0
+        ctr_geral = round(clicks / impressions * 100, 2) if impressions else 0
+        cpc_geral = round(spend / clicks, 4) if clicks else 0
         return {
             "kpis": {"spend": float(spend), "leads": int(leads), "revenue": float(revenue),
                      "channels": int(channels), "roas": float(roas), "cpl": cpl,
-                     "mer": mer, "deals": 0, "roas_meta": 4.0},
+                     "mer": mer, "deals": 0, "roas_meta": 4.0,
+                     "impressions": int(impressions), "clicks": int(clicks),
+                     "ctr": ctr_geral, "cpc": cpc_geral},
             "by_channel": by_channel, "top_campaigns": top_campaigns, "alerts": alerts,
         }
     except Exception as e:

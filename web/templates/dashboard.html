@@ -57,11 +57,21 @@
 </div>
 
 <!-- KPIs de Mídia -->
-<div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);">
+<div class="kpi-grid" style="grid-template-columns:repeat(7,1fr);">
   <div class="kpi-card">
     <div class="kpi-label">Total Investido</div>
     <div class="kpi-value green">R$ {{ "%.0f"|format(kpis.spend) }}</div>
     <div class="kpi-sub">{{ kpis.channels }} canais ativos</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Impressões</div>
+    <div class="kpi-value">{{ "{:,.0f}".format(kpis.impressions).replace(",",".") }}</div>
+    <div class="kpi-sub">CPM R$ {{ "%.2f"|format((kpis.spend / kpis.impressions * 1000) if kpis.impressions else 0) }}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Cliques</div>
+    <div class="kpi-value">{{ "{:,.0f}".format(kpis.clicks).replace(",",".") }}</div>
+    <div class="kpi-sub">CTR {{ "%.2f"|format(kpis.ctr) }}% · CPC R$ {{ "%.2f"|format(kpis.cpc) }}</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-label">Leads Gerados</div>
@@ -195,6 +205,10 @@
           <tr>
             <th>Canal</th>
             <th>Spend</th>
+            <th>Impressões</th>
+            <th>Cliques</th>
+            <th>CTR</th>
+            <th>CPC</th>
             <th>Leads</th>
             <th>CPL</th>
             <th>ROAS</th>
@@ -205,12 +219,16 @@
           <tr>
             <td><span class="badge badge-{{ r.channel }}">{{ r.channel }}</span></td>
             <td>R$ {{ "%.0f"|format(r.spend) }}</td>
+            <td>{{ "{:,.0f}".format(r.impressions).replace(",",".") }}</td>
+            <td>{{ "{:,.0f}".format(r.clicks).replace(",",".") }}</td>
+            <td>{{ "%.2f"|format(r.ctr * 100) }}%</td>
+            <td>R$ {{ "%.2f"|format(r.cpc) }}</td>
             <td>{{ r.leads }}</td>
             <td>R$ {{ "%.2f"|format(r.cpl) }}</td>
             <td class="{% if r.roas >= 3 %}text-green{% endif %}">{{ "%.2f"|format(r.roas) }}x</td>
           </tr>
           {% else %}
-          <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:2rem;">Sem dados — configure o pipeline e rode o health check</td></tr>
+          <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:2rem;">Sem dados — configure o pipeline e rode o health check</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -252,30 +270,36 @@
     <table>
       <thead>
         <tr>
-          <th>Campanha (UTM)</th>
+          <th>Campanha</th>
           <th>Canal</th>
           <th>Produto</th>
           <th>Spend</th>
+          <th>Impressões</th>
+          <th>Cliques</th>
+          <th>CTR</th>
           <th>Leads</th>
-          <th>Receita</th>
-          <th>ROAS</th>
           <th>CPL</th>
+          <th>ROAS</th>
         </tr>
       </thead>
       <tbody>
         {% for c in top_campaigns %}
         <tr>
-          <td style="font-family:monospace;font-size:0.78rem;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.campaign_utm }}</td>
+          <td style="max-width:240px;" title="{{ c.campaign_utm }}">
+            <div style="font-size:0.82rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ c.campaign_name or c.campaign_utm }}</div>
+          </td>
           <td><span class="badge badge-{{ c.channel }}">{{ c.channel }}</span></td>
           <td>{{ c.produto }}</td>
           <td>R$ {{ "%.0f"|format(c.spend) }}</td>
+          <td>{{ "{:,.0f}".format(c.impressions).replace(",",".") }}</td>
+          <td>{{ "{:,.0f}".format(c.clicks).replace(",",".") }}</td>
+          <td>{{ "%.2f"|format((c.clicks / c.impressions * 100) if c.impressions else 0) }}%</td>
           <td>{{ c.leads }}</td>
-          <td>R$ {{ "%.0f"|format(c.revenue) }}</td>
-          <td class="{% if c.roas >= 3 %}text-green{% endif %}">{{ "%.2f"|format(c.roas) }}x</td>
           <td>R$ {{ "%.2f"|format(c.cpl) }}</td>
+          <td class="{% if c.roas >= 3 %}text-green{% endif %}">{{ "%.2f"|format(c.roas) }}x</td>
         </tr>
         {% else %}
-        <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:2rem;">Nenhuma campanha no período</td></tr>
+        <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:2rem;">Nenhuma campanha no período</td></tr>
         {% endfor %}
       </tbody>
     </table>
