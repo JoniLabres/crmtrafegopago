@@ -332,7 +332,9 @@ async def campanhas(request: Request):
             conn = psycopg2.connect(get_db_url())
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT campaign_utm, channel, produto,
+                    SELECT campaign_utm,
+                           MAX(campaign_name) AS campaign_name,
+                           channel, produto,
                            COALESCE(ROUND(SUM(spend)::numeric,2), 0)       AS spend,
                            COALESCE(SUM(leads), 0)                          AS leads,
                            COALESCE(SUM(clicks), 0)                         AS clicks,

@@ -47,7 +47,7 @@
   <table id="campaigns-table">
     <thead>
       <tr>
-        <th>UTM Campaign</th>
+        <th>Campanha</th>
         <th>Canal</th>
         <th>Produto</th>
         <th>Spend</th>
@@ -62,7 +62,12 @@
     <tbody>
       {% for c in campaigns %}
       <tr data-channel="{{ c.channel }}" data-produto="{{ c.produto }}" data-utm="{{ c.campaign_utm }}">
-        <td style="font-family:monospace;font-size:0.78rem;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ c.campaign_utm }}">{{ c.campaign_utm }}</td>
+        <td style="max-width:280px;" title="{{ c.campaign_utm }}">
+          <div style="font-size:0.85rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ c.campaign_name or c.campaign_utm }}</div>
+          {% if c.campaign_name and c.campaign_utm != c.campaign_name %}
+          <div style="font-family:monospace;font-size:0.7rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ c.campaign_utm }}</div>
+          {% endif %}
+        </td>
         <td><span class="badge badge-{{ c.channel }}">{{ c.channel }}</span></td>
         <td>{{ c.produto }}</td>
         <td>R$ {{ "%.0f"|format(c.spend) }}</td>

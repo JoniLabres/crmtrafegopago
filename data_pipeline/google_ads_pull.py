@@ -105,6 +105,7 @@ class GoogleAdsPuller(BasePuller):
         url = f"{GOOGLE_ADS_BASE}/customers/{self.customer_id}/googleAds:searchStream"
         query = f"""
             SELECT
+                campaign.id,
                 campaign.name,
                 campaign.tracking_url_template,
                 campaign.final_url_suffix,
@@ -115,7 +116,7 @@ class GoogleAdsPuller(BasePuller):
                 segments.date
             FROM campaign
             WHERE segments.date BETWEEN '{date_from}' AND '{date_to}'
-              AND campaign.status = 'ENABLED'
+              AND campaign.status != 'REMOVED'
               AND metrics.cost_micros > 0
         """
         headers = {
@@ -137,6 +138,7 @@ class GoogleAdsPuller(BasePuller):
                 metrics  = result.get("metrics", {})
                 segments = result.get("segments", {})
                 rows.append({
+                    "campaign_id":   str(campaign.get("id", "")),
                     "campaign_name": campaign.get("name", ""),
                     "tracking_url":  campaign.get("trackingUrlTemplate", ""),
                     "final_url_suffix": campaign.get("finalUrlSuffix", ""),
@@ -168,15 +170,21 @@ class GoogleAdsPuller(BasePuller):
             impressions = int(item.get("impressions", 0))
             clicks      = int(item.get("clicks", 0))
             conversions = int(item.get("conversions", 0))
+            campaign_id   = item.get("campaign_id", "")
+            campaign_name = item.get("campaign_name", "")
+            utm = self._extract_utm_campaign(
+                item.get("tracking_url", ""),
+                item.get("final_url_suffix", ""),
+                campaign_name,
+            )
+            # Se o UTM extraído é apenas o nome slugificado (sem estrutura padrão), usa o ID
+            has_real_utm = "_topo_" in utm or "_meio_" in utm or "_fundo_" in utm
+            campaign_utm = utm if has_real_utm else f"google_{campaign_id}"
             rows.append({
                 "date":          item.get("date", ""),
                 "channel":       self.channel,
-                "campaign_utm":  self._extract_utm_campaign(
-                    item.get("tracking_url", ""),
-                    item.get("final_url_suffix", ""),
-                    item.get("campaign_name", ""),
-                ),
-                "campaign_name": item.get("campaign_name", ""),
+                "campaign_utm":  campaign_utm,
+                "campaign_name": campaign_name,
                 "spend":         spend,
                 "impressions":   impressions,
                 "clicks":        clicks,

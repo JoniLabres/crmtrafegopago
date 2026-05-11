@@ -46,6 +46,7 @@ class MetaAdsPuller(BasePuller):
             "time_range": f'{{"since":"{date_from}","until":"{date_to}"}}',
             "time_increment": 1,
             "limit": 500,
+            "filtering": '[{"field":"spend","operator":"GREATER_THAN","value":"0"}]',
         }
         results = []
         while url:
@@ -123,7 +124,11 @@ class MetaAdsPuller(BasePuller):
             clicks = int(item.get("clicks", 0) or 0)
             leads = self._extract_leads(item.get("actions", []))
             campaign_name = item.get("campaign_name", "")
-            campaign_utm = self._extract_utm_from_name(campaign_name)
+            campaign_id   = str(item.get("campaign_id", ""))
+            # Tenta extrair UTM real do nome; fallback garante unicidade via campaign_id
+            utm_from_name = self._extract_utm_from_name(campaign_name)
+            has_real_utm = "utm_campaign=" in campaign_name or "_topo_" in utm_from_name or "_meio_" in utm_from_name or "_fundo_" in utm_from_name
+            campaign_utm = utm_from_name if has_real_utm else f"meta_{campaign_id}"
             rows.append({
                 "date": item.get("date_start", ""),
                 "channel": self.channel,
