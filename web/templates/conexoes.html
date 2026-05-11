@@ -526,6 +526,7 @@
           <input type="date" id="pipeline-date-to" class="input input-dark" style="width:175px;">
         </div>
         <button class="btn btn-primary" onclick="runPipeline()" style="height:38px;">Executar Pipeline</button>
+        <button class="btn btn-outline btn-sm" onclick="clearAndRun()" style="height:38px;border-color:var(--warn);color:var(--warn);" title="Apaga todos os dados e reprocessa do zero">🗑 Limpar e Reprocessar</button>
       </div>
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
         <button class="btn btn-ghost btn-sm" onclick="setDays(7)">Últimos 7 dias</button>
@@ -838,6 +839,30 @@ async function runPipeline() {
     showToast('Erro de rede', 'error');
   }
 }
+
+async function clearAndRun() {
+  const from = document.getElementById('pipeline-date-from').value;
+  const to   = document.getElementById('pipeline-date-to').value;
+  if (!from || !to) { showToast('Selecione o período antes de executar', 'warn'); return; }
+  if (!confirm(`Isso vai APAGAR todos os dados de campanhas do banco e reprocessar ${from} → ${to}. Confirma?`)) return;
+  const out = document.getElementById('action-output');
+  out.style.display = 'block'; out.textContent = 'Limpando dados antigos...';
+  try {
+    // 1. Limpa o banco
+    const cr = await fetch('/api/db/clear-campaigns', {method:'POST'});
+    const cd = await cr.json();
+    out.textContent = cd.message + '\nReprocessando...';
+    // 2. Roda o pipeline
+    const r = await fetch('/api/pipeline/run', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({date_from: from, date_to: to})});
+    const d = await r.json();
+    out.textContent = cd.message + '\n' + d.message;
+    showToast(d.message, r.ok ? 'ok' : 'error');
+  } catch(e) {
+    out.textContent = 'Erro: ' + e.message;
+    showToast('Erro', 'error');
+  }
+}
+
 // Initialize date pickers after all functions are defined
 document.addEventListener('DOMContentLoaded', function(){ setDays(7); });
 
