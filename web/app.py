@@ -1284,6 +1284,109 @@ async def debug_compare(date_from: str = None, date_to: str = None):
     return result
 
 
+@app.get("/api/debug/pull")
+async def debug_pull(produto: str = "ixc-provedor", channel: str = "meta",
+                     date_from: str = None, date_to: str = None):
+    """
+    Roda o pull de um produto/canal específico passo a passo e retorna output verbose.
+    Uso: /api/debug/pull?produto=ixc-provedor&channel=meta&date_from=2026-05-01&date_to=2026-05-10
+    """
+    _apply_env_overrides()
+    import traceback
+    import requests as _req
+    from datetime import date as _date, timedelta as _td
+
+    if not date_from:
+        date_from = str(_date.today() - _td(days=9))
+    if not date_to:
+        date_to = str(_date.today() - _td(days=1))
+
+    result: dict = {
+        "produto": produto, "channel": channel,
+        "period": f"{date_from} → {date_to}",
+        "steps": [],
+    }
+
+    def step(name: str, data):
+        result["steps"].append({"step": name, "data": data})
+
+    # Step 1: load accounts
+    accounts = _load_accounts()
+    prod_cfg = next((p for p in accounts if p["nome"] == produto), None)
+    step("accounts_loaded", {"count": len(accounts), "names": [p["nome"] for p in accounts]})
+
+    if not prod_cfg:
+        step("ERROR", f"Produto '{produto}' não encontrado em accounts.json")
+        return result
+
+    account_config = prod_cfg.get("contas", {}).get(channel, {})
+    step("account_config", account_config)
+
+    # Step 2: check token
+    token = os.getenv("META_ACCESS_TOKEN", "") if channel == "meta" else ""
+    step("token_set", bool(token))
+    step("token_prefix", token[:12] + "..." if token else "")
+
+    if channel == "meta":
+        ad_account_id = account_config.get("ad_account_id", "")
+        step("ad_account_id", ad_account_id)
+
+        if not token or not ad_account_id:
+            step("ERROR", "META_ACCESS_TOKEN ou ad_account_id ausente")
+            return result
+
+        # Step 3: raw API call
+        try:
+            url = f"https://graph.facebook.com/v21.0/{ad_account_id}/insights"
+            params = {
+                "access_token": token,
+                "level": "campaign",
+                "fields": "campaign_name,campaign_id,spend,impressions,clicks,actions,date_start",
+                "time_range": f'{{"since":"{date_from}","until":"{date_to}"}}',
+                "time_increment": 1,
+                "limit": 10,
+                "filtering": '[{"field":"spend","operator":"GREATER_THAN","value":"0"}]',
+            }
+            resp = _req.get(url, params=params, timeout=30)
+            step("api_status", resp.status_code)
+            if resp.ok:
+                data = resp.json()
+                rows = data.get("data", [])
+                paging = data.get("paging", {})
+                step("api_rows_returned", len(rows))
+                step("api_paging", {"next": bool(paging.get("next")), "cursors": bool(paging.get("cursors"))})
+                if rows:
+                    step("api_first_row", rows[0])
+                    step("api_total_spend_sample", sum(float(r.get("spend", 0)) for r in rows))
+                else:
+                    step("api_empty", "Nenhuma linha retornada — sem campanhas com gasto no período?")
+            else:
+                step("api_error", resp.text[:500])
+        except Exception as e:
+            step("api_exception", traceback.format_exc())
+
+        # Step 4: try instantiating puller and running full pull
+        try:
+            sys.path.insert(0, str(ROOT / "data_pipeline"))
+            from meta_ads_pull import MetaAdsPuller
+            from datetime import date as _d2
+            puller = MetaAdsPuller(produto=produto, account_config=account_config)
+            step("puller_auth", "OK")
+            df = puller.run(_d2.fromisoformat(date_from), _d2.fromisoformat(date_to))
+            step("puller_rows", len(df))
+            if not df.empty:
+                step("puller_spend_total", float(df["spend"].sum()))
+                step("puller_sample", df.head(3).to_dict(orient="records"))
+            else:
+                step("puller_empty", "DataFrame vazio após normalize()")
+        except EnvironmentError as e:
+            step("puller_env_error", str(e))
+        except Exception as e:
+            step("puller_exception", traceback.format_exc())
+
+    return result
+
+
 @app.get("/api/db/test")
 async def db_test():
     """Diagnoses the database connection and shows what URL is being used."""
