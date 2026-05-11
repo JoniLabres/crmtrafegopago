@@ -358,17 +358,31 @@ async def env_save(request: Request):
         load_dotenv(ENV_PATH, override=True)
 
     # Persist to DB so vars survive across serverless invocations
-    if get_db_url():
-        existing = _load_env_overrides()
-        for key, value in data.items():
-            if value:
-                existing[key] = value
-        config_store.save("env_overrides", existing, None)
-        return {"message": f"{saved} variável(is) salva(s) no banco de dados"}
+    db_url = get_db_url()
+    if db_url:
+        try:
+            existing = _load_env_overrides()
+            for key, value in data.items():
+                if value:
+                    existing[key] = value
+            ok = config_store.save("env_overrides", existing, None)
+            if ok:
+                return {"message": f"{saved} variável(is) salva(s) no banco ✓"}
+            else:
+                return {
+                    "message": f"{saved} variável(is) ativa(s) nesta sessão — falha ao gravar no banco. Verifique a conexão em Ações → Health Check.",
+                    "warn": True,
+                }
+        except Exception as exc:
+            logger.error("env_save DB error: %s", exc)
+            return {
+                "message": f"Erro ao salvar no banco: {exc}",
+                "warn": True,
+            }
 
     if config_store.IS_VERCEL:
         return {
-            "message": f"{saved} variável(is) ativa(s) nesta sessão apenas — configure DATABASE_URL para persistir",
+            "message": "Banco não detectado (POSTGRES_URL / DATABASE_URL ausente). Credenciais ativas só nesta sessão.",
             "warn": True,
         }
     return {"message": f"{saved} variável(is) salva(s) no .env"}
@@ -799,6 +813,36 @@ async def pipeline_debug():
             for p in accounts
         ],
     }
+
+
+@app.get("/api/db/test")
+async def db_test():
+    """Diagnoses the database connection and shows what URL is being used."""
+    _apply_env_overrides()
+    db_url = get_db_url()
+    if not db_url:
+        detected = {k: bool(os.getenv(k)) for k in ["DATABASE_URL","POSTGRES_URL","POSTGRES_URL_NON_POOLING","POSTGRES_PRISMA_URL"]}
+        return JSONResponse({"ok": False, "error": "Nenhuma variável de banco encontrada", "env_vars": detected}, status_code=400)
+    # Mask password in URL for display
+    import re
+    safe_url = re.sub(r":([^:@]+)@", ":***@", db_url)
+    try:
+        import psycopg2
+        conn = psycopg2.connect(db_url)
+        with conn.cursor() as cur:
+            cur.execute("SELECT version()")
+            ver = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM ixc_config") if True else None
+        conn.close()
+        overrides = _load_env_overrides()
+        return {
+            "ok": True,
+            "url": safe_url,
+            "pg_version": ver[:40],
+            "ixc_config_keys": list(overrides.keys()),
+        }
+    except Exception as e:
+        return JSONResponse({"ok": False, "url": safe_url, "error": str(e)}, status_code=500)
 
 
 @app.post("/api/db/setup")

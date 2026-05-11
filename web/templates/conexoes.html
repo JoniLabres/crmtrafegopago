@@ -538,9 +538,15 @@
 
   <!-- Outras ações -->
   <div class="panel">
+    <div class="panel-head"><h3>Banco de dados</h3></div>
+    <div class="panel-body" style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+      <button class="btn btn-outline btn-sm" onclick="testDb()">🔌 Testar conexão</button>
+      <button class="btn btn-primary" onclick="setupDb()" title="Cria as tabelas no banco PostgreSQL (seguro rodar múltiplas vezes)">🗄️ Configurar banco</button>
+    </div>
+  </div>
+  <div class="panel" style="margin-top:0.75rem;">
     <div class="panel-head"><h3>Outras ações</h3></div>
     <div class="panel-body" style="display:flex;gap:0.75rem;flex-wrap:wrap;">
-      <button class="btn btn-primary" onclick="setupDb()" title="Cria as tabelas no banco PostgreSQL (seguro rodar múltiplas vezes)">🗄️ Configurar banco</button>
       <button class="btn btn-outline" onclick="runHealthCheck()">Health Check</button>
       <button class="btn btn-ghost" onclick="createHubSpotProps()">Criar propriedades HubSpot</button>
       <button class="btn btn-ghost" onclick="importProducts()">Importar Produtos HubSpot</button>
@@ -791,6 +797,25 @@ async function runHealthCheck() {
   const r = await fetch('/api/health-check', {method:'POST'});
   const d = await r.json();
   out.textContent = d.output;
+}
+
+async function testDb() {
+  const out = document.getElementById('action-output');
+  out.style.display = 'block'; out.textContent = 'Testando conexão com o banco...';
+  try {
+    const r = await fetch('/api/db/test');
+    const d = await r.json();
+    if (d.ok) {
+      out.textContent = `✓ Banco conectado!\nURL: ${d.url}\nVersão: ${d.pg_version}\nChaves salvas: ${d.ixc_config_keys.join(', ') || '(nenhuma ainda)'}`;
+      showToast('Banco conectado', 'ok');
+    } else {
+      out.textContent = `✗ Falha na conexão\n${d.error}\nURL tentada: ${d.url || '(nenhuma)'}\n\nVariáveis detectadas:\n${JSON.stringify(d.env_vars || {}, null, 2)}`;
+      showToast('Falha na conexão com o banco', 'error');
+    }
+  } catch(e) {
+    out.textContent = 'Erro de rede: ' + e.message;
+    showToast('Erro de rede', 'error');
+  }
 }
 function setDays(n) {
   const to = new Date();
