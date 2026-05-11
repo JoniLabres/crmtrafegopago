@@ -416,6 +416,96 @@ def meta_create_ad(product: str, adset_id: str, headline: str, body: str,
             "message": f"Anúncio '{headline[:60]}' criado (pausado para revisão). ID: {ad_id}"}
 
 
+# ── DB QUERY TOOL ─────────────────────────────────────────────────────────────
+
+def db_query_campaigns(date_from: str = None, date_to: str = None,
+                       produto: str = None, channel: str = None) -> dict:
+    """Consulta o banco de dados local com métricas agregadas de campanhas.
+    Use para responder perguntas sobre spend, leads, ROAS, CPL, CTR no período."""
+    from datetime import date as _date, timedelta as _td
+    if not date_from:
+        date_from = str(_date.today() - _td(days=7))
+    if not date_to:
+        date_to = str(_date.today())
+    try:
+        import sys, pathlib, psycopg2
+        root = pathlib.Path(__file__).parent.parent
+        sys.path.insert(0, str(root / "web"))
+        from config_store import get_db_url
+        conn = psycopg2.connect(get_db_url())
+
+        where = ["date BETWEEN %s AND %s"]
+        params: list = [date_from, date_to]
+        if produto:
+            where.append("produto = %s")
+            params.append(produto)
+        if channel:
+            where.append("channel = %s")
+            params.append(channel)
+        where_sql = " AND ".join(where)
+
+        with conn.cursor() as cur:
+            cur.execute(f"""
+                SELECT produto, channel,
+                       ROUND(SUM(spend)::numeric,2)      AS spend,
+                       SUM(impressions)                   AS impressions,
+                       SUM(clicks)                        AS clicks,
+                       SUM(leads)                         AS leads,
+                       ROUND(SUM(revenue)::numeric,2)     AS revenue,
+                       CASE WHEN SUM(spend)>0
+                            THEN ROUND((SUM(revenue)/SUM(spend))::numeric,2) ELSE 0 END AS roas,
+                       CASE WHEN SUM(leads)>0
+                            THEN ROUND((SUM(spend)/SUM(leads))::numeric,2) ELSE 0 END AS cpl,
+                       CASE WHEN SUM(clicks)>0
+                            THEN ROUND((SUM(spend)/SUM(clicks))::numeric,2) ELSE 0 END AS cpc,
+                       CASE WHEN SUM(impressions)>0
+                            THEN ROUND((SUM(clicks)::numeric/SUM(impressions)*100)::numeric,2) ELSE 0 END AS ctr_pct
+                FROM campaigns_daily
+                WHERE {where_sql}
+                GROUP BY produto, channel
+                ORDER BY spend DESC
+            """, params)
+            cols = [d[0] for d in cur.description]
+            by_channel = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+            cur.execute(f"""
+                SELECT MAX(campaign_name) AS campaign_name, campaign_utm,
+                       produto, channel,
+                       ROUND(SUM(spend)::numeric,2)      AS spend,
+                       SUM(leads)                         AS leads,
+                       CASE WHEN SUM(leads)>0
+                            THEN ROUND((SUM(spend)/SUM(leads))::numeric,2) ELSE 0 END AS cpl,
+                       CASE WHEN SUM(spend)>0
+                            THEN ROUND((SUM(revenue)/SUM(spend))::numeric,2) ELSE 0 END AS roas
+                FROM campaigns_daily
+                WHERE {where_sql}
+                GROUP BY campaign_utm, produto, channel
+                ORDER BY spend DESC
+                LIMIT 15
+            """, params)
+            cols2 = [d[0] for d in cur.description]
+            top_campaigns = [dict(zip(cols2, r)) for r in cur.fetchall()]
+
+        conn.close()
+        totals = {
+            "spend":       sum(float(r["spend"]) for r in by_channel),
+            "leads":       sum(int(r["leads"]) for r in by_channel),
+            "impressions": sum(int(r["impressions"]) for r in by_channel),
+            "clicks":      sum(int(r["clicks"]) for r in by_channel),
+        }
+        totals["cpl"]  = round(totals["spend"] / totals["leads"], 2) if totals["leads"] else 0
+        totals["revenue"] = sum(float(r["revenue"]) for r in by_channel)
+        totals["roas"] = round(totals["revenue"] / totals["spend"], 2) if totals["spend"] else 0
+        return {
+            "period": f"{date_from} → {date_to}",
+            "totals": totals,
+            "by_product_channel": by_channel,
+            "top_campaigns": top_campaigns,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 # ── TOOL DEFINITIONS (Anthropic format) ──────────────────────────────────────
 
 TOOLS = [
@@ -542,6 +632,20 @@ TOOLS = [
         },
     },
     {
+        "name": "db_query_campaigns",
+        "description": "Consulta o banco de dados local com métricas agregadas de campanhas (spend, leads, ROAS, CPL, CTR, impressões, cliques). Use para responder perguntas sobre performance no período, comparar canais, identificar melhores campanhas, etc.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "date_from": {"type": "string", "description": "Data início YYYY-MM-DD (padrão: 7 dias atrás)"},
+                "date_to":   {"type": "string", "description": "Data fim YYYY-MM-DD (padrão: hoje)"},
+                "produto":   {"type": "string", "description": "Filtrar por produto específico (ex: ixcsoft). Omitir para todos."},
+                "channel":   {"type": "string", "description": "Filtrar por canal: meta, google, linkedin, tiktok. Omitir para todos."},
+            },
+            "required": [],
+        },
+    },
+    {
         "name": "google_update_campaign_status",
         "description": "Pausa (PAUSED) ou ativa (ENABLED) uma campanha Google Ads. SEMPRE confirme com o usuário antes de executar.",
         "input_schema": {
@@ -567,4 +671,5 @@ TOOL_FUNCTIONS = {
     "google_list_campaigns":         google_list_campaigns,
     "google_update_campaign_budget": google_update_campaign_budget,
     "google_update_campaign_status": google_update_campaign_status,
+    "db_query_campaigns":            db_query_campaigns,
 }

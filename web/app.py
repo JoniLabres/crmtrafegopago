@@ -8,7 +8,7 @@ from datetime import datetime
 # Ensure web/ is on sys.path before importing local modules
 sys.path.insert(0, str(Path(__file__).parent))
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -65,6 +65,7 @@ _ENV_KEYS = [
     "HUBSPOT_API_KEY","ANTHROPIC_API_KEY","SLACK_WEBHOOK_URL","DATABASE_URL","APP_BASE_URL",
     "GA4_MEASUREMENT_ID","GA4_PROPERTY_ID","GA4_API_SECRET","GA4_CREDENTIALS_JSON",
     "GTM_ACCOUNT_ID","GTM_CONTAINER_ID","GTM_PUBLIC_ID","GTM_CREDENTIALS_JSON",
+    "SLACK_BOT_TOKEN","SLACK_SIGNING_SECRET",
 ]
 
 
@@ -1385,6 +1386,131 @@ async def debug_pull(produto: str = "ixc-provedor", channel: str = "meta",
             step("puller_exception", traceback.format_exc())
 
     return result
+
+
+# ── Slack Bot ─────────────────────────────────────────────────────────────────
+
+_slack_sessions: dict = {}  # user_id → CampaignAgent (in-memory)
+
+SLACK_SYSTEM_SUFFIX = """
+
+FORMATO PARA SLACK:
+- Use *negrito* (um asterisco) para destaque
+- Use listas com • ou -
+- Mantenha respostas concisas — máx 400 palavras
+- Não use Markdown com ## ou ###, use *Título* em vez disso
+- Use emojis com moderação para tornar a leitura mais fácil
+"""
+
+
+def _slack_post(channel: str, text: str, thread_ts: str = None) -> bool:
+    token = os.getenv("SLACK_BOT_TOKEN", "")
+    if not token:
+        return False
+    import requests as _req
+    payload = {"channel": channel, "text": text}
+    if thread_ts:
+        payload["thread_ts"] = thread_ts
+    try:
+        r = _req.post(
+            "https://slack.com/api/chat.postMessage",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json=payload, timeout=10,
+        )
+        if not r.ok or not r.json().get("ok"):
+            logger.error("slack post error: %s", r.text[:200])
+        return r.ok
+    except Exception as e:
+        logger.error("slack post exception: %s", e)
+        return False
+
+
+def _verify_slack_sig(body: bytes, timestamp: str, signature: str) -> bool:
+    import hmac, hashlib, time
+    signing_secret = os.getenv("SLACK_SIGNING_SECRET", "")
+    if not signing_secret:
+        return True  # sem secret configurado, permite (dev mode)
+    try:
+        if abs(time.time() - int(timestamp)) > 300:
+            return False
+        base = f"v0:{timestamp}:{body.decode('utf-8')}"
+        expected = "v0=" + hmac.new(
+            signing_secret.encode(), base.encode(), hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(expected, signature)
+    except Exception:
+        return False
+
+
+def _get_slack_agent(user_id: str):
+    if user_id not in _slack_sessions:
+        from agent import CampaignAgent
+        agent = CampaignAgent()
+        agent._system_prompt = agent._system_prompt + SLACK_SYSTEM_SUFFIX
+        _slack_sessions[user_id] = agent
+    return _slack_sessions[user_id]
+
+
+def _md_to_mrkdwn(text: str) -> str:
+    """Converte markdown básico para Slack mrkdwn."""
+    import re
+    text = re.sub(r"\*\*(.+?)\*\*", r"*\1*", text)   # **bold** → *bold*
+    text = re.sub(r"#{1,3} (.+)", r"*\1*", text)       # ## Header → *Header*
+    text = re.sub(r"`{3}[a-z]*\n?", "```", text)        # normaliza code blocks
+    return text
+
+
+async def _process_slack_message(channel: str, text: str, user_id: str, thread_ts: str):
+    try:
+        _apply_env_overrides()
+        agent = _get_slack_agent(user_id)
+        active = _active_product
+        reply = agent.chat(text, product_name=active)
+        _slack_post(channel, _md_to_mrkdwn(reply), thread_ts)
+    except Exception as e:
+        logger.error("Slack processing error: %s", e, exc_info=True)
+        _slack_post(channel, f"❌ Erro ao processar: {e}", thread_ts)
+
+
+@app.post("/api/slack/events")
+async def slack_events(request: Request, background_tasks: BackgroundTasks):
+    body = await request.body()
+
+    timestamp = request.headers.get("X-Slack-Request-Timestamp", "0")
+    signature = request.headers.get("X-Slack-Signature", "")
+    if not _verify_slack_sig(body, timestamp, signature):
+        return JSONResponse({"error": "invalid signature"}, status_code=403)
+
+    data = json.loads(body)
+
+    # Handshake de verificação do Slack
+    if data.get("type") == "url_verification":
+        return {"challenge": data["challenge"]}
+
+    event = data.get("event", {})
+    event_type = event.get("type", "")
+
+    if event_type in ("message", "app_mention"):
+        # Ignora mensagens do próprio bot
+        if event.get("bot_id") or event.get("subtype") == "bot_message":
+            return {"ok": True}
+
+        channel  = event.get("channel", "")
+        text     = event.get("text", "").strip()
+        user_id  = event.get("user", "unknown")
+        # Responde no mesmo thread se existir, senão usa o ts da mensagem como thread
+        thread_ts = event.get("thread_ts") or event.get("ts", "")
+
+        if not text or not channel:
+            return {"ok": True}
+
+        # Remove menção @bot do início se houver
+        import re
+        text = re.sub(r"<@[A-Z0-9]+>\s*", "", text).strip()
+
+        background_tasks.add_task(_process_slack_message, channel, text, user_id, thread_ts)
+
+    return {"ok": True}
 
 
 @app.get("/api/db/test")
