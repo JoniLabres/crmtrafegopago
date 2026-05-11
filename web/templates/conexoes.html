@@ -267,13 +267,26 @@
           <label>Anthropic API Key</label>
           <input name="ANTHROPIC_API_KEY" class="input input-dark" type="password" placeholder="sk-ant-xxxxxxxxx" value="{{ env.ANTHROPIC_API_KEY or '' }}">
         </div>
-        <div class="form-group">
-          <label>Slack Webhook URL</label>
-          <input name="SLACK_WEBHOOK_URL" class="input input-dark" placeholder="https://hooks.slack.com/services/..." value="{{ env.SLACK_WEBHOOK_URL or '' }}">
+        <div style="border-top:1px solid var(--border);padding-top:0.75rem;margin-top:0.25rem;">
+          <div style="font-size:0.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.6rem;">Slack Bot (conversacional)</div>
+          <div class="form-group">
+            <label>Bot Token <span style="color:var(--primary);font-size:0.72rem;">(xoxb-... — para o Midas responder no Slack)</span></label>
+            <input name="SLACK_BOT_TOKEN" class="input input-dark" type="password" placeholder="xoxb-xxxxxxxxxxxx-xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxx" value="{{ env.SLACK_BOT_TOKEN or '' }}">
+          </div>
+          <div class="form-group">
+            <label>Signing Secret <span style="color:var(--muted);font-size:0.72rem;">(Basic Information → App Credentials)</span></label>
+            <input name="SLACK_SIGNING_SECRET" class="input input-dark" type="password" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" value="{{ env.SLACK_SIGNING_SECRET or '' }}">
+          </div>
+          <div class="form-group">
+            <label>Webhook URL <span style="color:var(--muted);font-size:0.72rem;">(alertas automáticos)</span></label>
+            <input name="SLACK_WEBHOOK_URL" class="input input-dark" placeholder="https://hooks.slack.com/services/..." value="{{ env.SLACK_WEBHOOK_URL or '' }}">
+          </div>
         </div>
-        <div class="form-group">
-          <label>Database URL (PostgreSQL)</label>
-          <input name="DATABASE_URL" class="input input-dark" placeholder="postgresql://user:pass@host:5432/dbname" value="{{ env.DATABASE_URL or '' }}">
+        <div style="border-top:1px solid var(--border);padding-top:0.75rem;margin-top:0.25rem;">
+          <div class="form-group">
+            <label>Database URL (PostgreSQL)</label>
+            <input name="DATABASE_URL" class="input input-dark" placeholder="postgresql://user:pass@host:5432/dbname" value="{{ env.DATABASE_URL or '' }}">
+          </div>
         </div>
         <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end;">Salvar</button>
       </form>
