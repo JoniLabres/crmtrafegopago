@@ -32,6 +32,17 @@ app = FastAPI(title="IXCTraffic", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
+
+@app.exception_handler(Exception)
+async def _unhandled_exception(request: Request, exc: Exception):
+    import traceback
+    tb = traceback.format_exc()
+    logger.error("Unhandled exception %s %s: %s\n%s", request.method, request.url.path, exc, tb)
+    return JSONResponse(
+        {"error": str(exc), "type": type(exc).__name__, "path": request.url.path},
+        status_code=500,
+    )
+
 ENV_PATH = ROOT / ".env"
 THRESHOLDS_PATH = ROOT / "config" / "alert_thresholds.json"
 TAXONOMY_PATH   = ROOT / "config" / "utm_taxonomy.json"
@@ -105,9 +116,14 @@ def _list_products() -> list[str]:
     """Merge product names from products.json and accounts.json so both sources are covered."""
     names: set[str] = set()
     for key, path in [("products", PRODUCTS_PATH), ("accounts", ACCOUNTS_PATH)]:
-        data = config_store.load(key, path, {"produtos": []})
-        if isinstance(data, dict):
-            names.update(p["nome"] for p in data.get("produtos", []) if p.get("nome"))
+        try:
+            data = config_store.load(key, path, {"produtos": []})
+            if isinstance(data, dict):
+                for p in data.get("produtos", []):
+                    if isinstance(p, dict) and p.get("nome"):
+                        names.add(str(p["nome"]))
+        except Exception as exc:
+            logger.warning("_list_products [%s]: %s", key, exc)
     return sorted(names)
 
 
@@ -211,69 +227,77 @@ def _get_alert_count():
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    _apply_env_overrides()
-    params = request.query_params
-    produto = params.get("produto", "").strip()
-    date_from_str = params.get("date_from", "").strip()
-    date_to_str   = params.get("date_to", "").strip()
-
-    if date_from_str and date_to_str:
-        # Custom date range: convert to days relative to today for the DB query
-        try:
-            from datetime import date as _date
-            df = _date.fromisoformat(date_from_str)
-            dt = _date.fromisoformat(date_to_str)
-            days = (_date.today() - df).days + 1
-            days = max(1, min(days, 730))
-        except ValueError:
-            days = 30
-            date_from_str = date_to_str = ""
-    else:
-        try:
-            days = int(params.get("days", 30))
-            days = max(7, min(days, 365))
-        except ValueError:
-            days = 30
-        date_from_str = date_to_str = ""
-
-    data = _get_dashboard_data(days, produto)
-    ltv_all = _load_ltv()
-
-    # Filter LTV metrics to selected product
-    if produto and produto in ltv_all.get("por_produto", {}):
-        p = ltv_all["por_produto"][produto]
-        ltv_filtered = {
-            "global": {
-                "ltv_medio": p["ltv_medio"],
-                "mrr": p["mrr"],
-                "arr": p["arr"],
-                "total_clientes": p["total_clientes"],
-                "ativos": p["ativos"],
-                "churned": p["churned"],
-                "churn_rate_pct": p["churn_rate_pct"],
-            },
-            "por_produto": {produto: p},
-            "gerado_em": ltv_all.get("gerado_em"),
-        }
-    else:
-        ltv_filtered = ltv_all
-
     try:
-        produtos = _list_products()
-    except Exception:
-        produtos = []
+        _apply_env_overrides()
+        params = request.query_params
+        produto = params.get("produto", "").strip()
+        date_from_str = params.get("date_from", "").strip()
+        date_to_str   = params.get("date_to", "").strip()
 
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request, "page": "dashboard", "days": days,
-        "produto_filtro": produto,
-        "date_from": date_from_str,
-        "date_to":   date_to_str,
-        "produtos": produtos,
-        "active_product": _active_product, "alert_count": _get_alert_count(),
-        "ltv": ltv_filtered,
-        "last_sync": _get_last_sync(),
-        **data,
-    })
+        if date_from_str and date_to_str:
+            try:
+                from datetime import date as _date
+                df = _date.fromisoformat(date_from_str)
+                dt = _date.fromisoformat(date_to_str)
+                days = (_date.today() - df).days + 1
+                days = max(1, min(days, 730))
+            except ValueError:
+                days = 30
+                date_from_str = date_to_str = ""
+        else:
+            try:
+                days = int(params.get("days", 30))
+                days = max(7, min(days, 365))
+            except ValueError:
+                days = 30
+            date_from_str = date_to_str = ""
+
+        data = _get_dashboard_data(days, produto)
+        ltv_all = _load_ltv()
+
+        if produto and isinstance(ltv_all, dict) and produto in ltv_all.get("por_produto", {}):
+            p = ltv_all["por_produto"][produto]
+            ltv_filtered = {
+                "global": {
+                    "ltv_medio":        p.get("ltv_medio", 0),
+                    "mrr":              p.get("mrr", 0),
+                    "arr":              p.get("arr", 0),
+                    "total_clientes":   p.get("total_clientes", 0),
+                    "ativos":           p.get("ativos", 0),
+                    "churned":          p.get("churned", 0),
+                    "churn_rate_pct":   p.get("churn_rate_pct", 0),
+                },
+                "por_produto": {produto: p},
+                "gerado_em": ltv_all.get("gerado_em"),
+            }
+        else:
+            ltv_filtered = ltv_all
+
+        try:
+            produtos = _list_products()
+        except Exception:
+            produtos = []
+
+        return templates.TemplateResponse("dashboard.html", {
+            "request": request, "page": "dashboard", "days": days,
+            "produto_filtro": produto,
+            "date_from": date_from_str,
+            "date_to":   date_to_str,
+            "produtos": produtos,
+            "active_product": _active_product, "alert_count": _get_alert_count(),
+            "ltv": ltv_filtered,
+            "last_sync": _get_last_sync(),
+            **data,
+        })
+    except Exception as exc:
+        import traceback
+        tb = traceback.format_exc()
+        logger.error("Dashboard error: %s\n%s", exc, tb)
+        return HTMLResponse(
+            f"<pre style='font-family:monospace;padding:2rem;'>"
+            f"<b>Dashboard error</b> — {type(exc).__name__}: {exc}\n\n{tb}</pre>",
+            status_code=500,
+        )
 
 @app.get("/conexoes", response_class=HTMLResponse)
 async def conexoes(request: Request):
@@ -287,32 +311,47 @@ async def conexoes(request: Request):
 
 @app.get("/campanhas", response_class=HTMLResponse)
 async def campanhas(request: Request):
-    data = _get_dashboard_data(30)
-    all_campaigns = data["top_campaigns"]
     try:
-        import psycopg2
-        conn = psycopg2.connect(get_db_url())
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT campaign_utm, channel, produto,
-                       ROUND(SUM(spend)::numeric,2) AS spend, SUM(leads) AS leads,
-                       ROUND(SUM(revenue)::numeric,2) AS revenue,
-                       ROUND(AVG(roas)::numeric,2) AS roas,
-                       ROUND(AVG(NULLIF(cpl,0))::numeric,2) AS cpl,
-                       ROUND(AVG(NULLIF(cpc,0))::numeric,4) AS cpc,
-                       ROUND(AVG(NULLIF(ctr,0))::numeric,4) AS ctr
-                FROM campaigns_daily GROUP BY campaign_utm, channel, produto ORDER BY spend DESC
-            """)
-            cols = [d[0] for d in cur.description]
-            all_campaigns = [dict(zip(cols, r)) for r in cur.fetchall()]
-        conn.close()
-    except Exception:
-        pass
-    return templates.TemplateResponse("campanhas.html", {
-        "request": request, "page": "campanhas",
-        "campaigns": all_campaigns, "produtos": _list_products(),
-        "active_product": _active_product, "alert_count": _get_alert_count(),
-    })
+        _apply_env_overrides()
+        data = _get_dashboard_data(30)
+        all_campaigns = data["top_campaigns"]
+        try:
+            import psycopg2
+            conn = psycopg2.connect(get_db_url())
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT campaign_utm, channel, produto,
+                           ROUND(SUM(spend)::numeric,2) AS spend, SUM(leads) AS leads,
+                           ROUND(SUM(revenue)::numeric,2) AS revenue,
+                           ROUND(AVG(roas)::numeric,2) AS roas,
+                           ROUND(AVG(NULLIF(cpl,0))::numeric,2) AS cpl,
+                           ROUND(AVG(NULLIF(cpc,0))::numeric,4) AS cpc,
+                           ROUND(AVG(NULLIF(ctr,0))::numeric,4) AS ctr
+                    FROM campaigns_daily GROUP BY campaign_utm, channel, produto ORDER BY spend DESC
+                """)
+                cols = [d[0] for d in cur.description]
+                all_campaigns = [dict(zip(cols, r)) for r in cur.fetchall()]
+            conn.close()
+        except Exception as e:
+            logger.warning("campanhas DB query: %s", e)
+        try:
+            produtos = _list_products()
+        except Exception:
+            produtos = []
+        return templates.TemplateResponse("campanhas.html", {
+            "request": request, "page": "campanhas",
+            "campaigns": all_campaigns, "produtos": produtos,
+            "active_product": _active_product, "alert_count": _get_alert_count(),
+        })
+    except Exception as exc:
+        import traceback
+        tb = traceback.format_exc()
+        logger.error("Campanhas error: %s\n%s", exc, tb)
+        return HTMLResponse(
+            f"<pre style='font-family:monospace;padding:2rem;'>"
+            f"<b>Campanhas error</b> — {type(exc).__name__}: {exc}\n\n{tb}</pre>",
+            status_code=500,
+        )
 
 @app.get("/alertas", response_class=HTMLResponse)
 async def alertas(request: Request):
@@ -342,9 +381,13 @@ async def alertas(request: Request):
 
 @app.get("/agente", response_class=HTMLResponse)
 async def agente(request: Request):
+    try:
+        produtos = _list_products()
+    except Exception:
+        produtos = []
     return templates.TemplateResponse("agente.html", {
         "request": request, "page": "agente",
-        "produtos": _list_products(), "active_product": _active_product, "alert_count": _get_alert_count(),
+        "produtos": produtos, "active_product": _active_product, "alert_count": _get_alert_count(),
     })
 
 @app.get("/utm", response_class=HTMLResponse)
