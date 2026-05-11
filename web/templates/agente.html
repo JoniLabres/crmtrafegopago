@@ -16,7 +16,7 @@
 <div class="agent-top">
   <div class="agent-top-left">
     <h2>MIDAS IA</h2>
-    <p>Powered by Claude · usa dados reais do dashboard</p>
+    <p>Powered by Claude · acesso direto ao Meta Ads &amp; Google Ads</p>
   </div>
   <div class="product-selector">
     <label style="font-size:0.8rem;color:var(--muted);">Produto ativo:</label>
@@ -33,17 +33,20 @@
     <div class="msg agent fade-up">
       <div class="msg-bubble">Olá! Sou <strong>MIDAS IA</strong>, seu agente de tráfego pago.
 
-Selecione um produto no topo e use os comandos abaixo, ou me faça qualquer pergunta sobre suas campanhas.</div>
+Tenho acesso direto ao <strong>Meta Ads</strong> e <strong>Google Ads</strong> — posso listar campanhas, analisar performance, alterar budgets e criar campanhas.
+
+Selecione um produto no topo e use os chips abaixo para começar.</div>
       <div class="msg-meta">MIDAS IA · agora</div>
     </div>
   </div>
 
   <div class="chat-cmds">
+    <span class="cmd-chip" onclick="sendCmd('Liste as campanhas do Meta Ads com métricas dos últimos 7 dias')">📊 Listar Meta Ads</span>
+    <span class="cmd-chip" onclick="sendCmd('Liste as campanhas do Google Ads com métricas dos últimos 7 dias')">📊 Listar Google Ads</span>
     <span class="cmd-chip" onclick="sendCmd('/diagnostico')">/diagnostico</span>
     <span class="cmd-chip" onclick="sendCmd('/otimizar')">/otimizar</span>
     <span class="cmd-chip" onclick="sendCmd('/criar')">/criar campanha</span>
     <span class="cmd-chip" onclick="sendCmd('/prever 5000')">/prever R$5.000</span>
-    <span class="cmd-chip" onclick="sendCmd('/briefing')">/briefing</span>
   </div>
 
   <div class="chat-input-row">
@@ -121,7 +124,26 @@ function appendMsg(role, text, isPulse=false) {
 }
 
 function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  // Escape HTML entities first
+  let t = s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // Headers
+  t = t.replace(/^### (.+)$/gm, '<strong style="font-size:0.95rem;color:var(--primary);">$1</strong>');
+  t = t.replace(/^## (.+)$/gm,  '<strong style="font-size:1rem;color:var(--primary);">$1</strong>');
+  t = t.replace(/^# (.+)$/gm,   '<strong style="font-size:1.1rem;color:var(--primary);">$1</strong>');
+  // Bold and italic
+  t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  t = t.replace(/\*(.+?)\*/g,     '<em>$1</em>');
+  // Inline code
+  t = t.replace(/`([^`]+)`/g, '<code style="background:rgba(185,255,0,0.1);padding:1px 5px;border-radius:3px;font-size:0.85em;">$1</code>');
+  // Bullet lists
+  t = t.replace(/^[-•] (.+)$/gm, '<span style="display:block;padding-left:1rem;">• $1</span>');
+  // Numbered lists
+  t = t.replace(/^(\d+)\. (.+)$/gm, '<span style="display:block;padding-left:1rem;">$1. $2</span>');
+  // Horizontal rule
+  t = t.replace(/^---+$/gm, '<hr style="border:none;border-top:1px solid var(--border);margin:0.5rem 0;">');
+  // Line breaks
+  t = t.replace(/\n/g, '<br>');
+  return t;
 }
 
 function handleKey(e) {

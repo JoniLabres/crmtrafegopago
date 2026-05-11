@@ -6,25 +6,19 @@ logger = logging.getLogger(__name__)
 
 def join_campaign_data(ads_df: pd.DataFrame, deals_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Join de gastos de Ads com negócios do HubSpot por utm_campaign.
-    Retorna DataFrame consolidado com uma linha por campanha.
+    Join de gastos de Ads (por dia) com negócios do HubSpot por utm_campaign.
+    Mantém uma linha por (date, channel, campaign_utm) — sem agregar dias.
     """
     if ads_df.empty:
         logger.warning("ads_df vazio — retornando DataFrame vazio")
         return pd.DataFrame()
 
-    ads_agg = (
-        ads_df.groupby("campaign_utm", as_index=False)
-        .agg(
-            channel=("channel", "first"),
-            campaign_name=("campaign_name", "first"),
-            spend=("spend", "sum"),
-            impressions=("impressions", "sum"),
-            clicks=("clicks", "sum"),
-            leads=("leads", "sum"),
-        )
-    )
+    # Garantir que a coluna date existe
+    if "date" not in ads_df.columns:
+        ads_df = ads_df.copy()
+        ads_df["date"] = ""
 
+    # Join com HubSpot a nível de campanha (sem data — receita acumulada por UTM)
     if not deals_df.empty and "utm_campaign_origem" in deals_df.columns:
         deals_agg = (
             deals_df.groupby("utm_campaign_origem", as_index=False)
@@ -34,9 +28,9 @@ def join_campaign_data(ads_df: pd.DataFrame, deals_df: pd.DataFrame) -> pd.DataF
             )
             .rename(columns={"utm_campaign_origem": "campaign_utm"})
         )
-        merged = ads_agg.merge(deals_agg, on="campaign_utm", how="left")
+        merged = ads_df.merge(deals_agg, on="campaign_utm", how="left")
     else:
-        merged = ads_agg.copy()
+        merged = ads_df.copy()
         merged["revenue"] = 0.0
         merged["deals_count"] = 0
 
@@ -45,9 +39,6 @@ def join_campaign_data(ads_df: pd.DataFrame, deals_df: pd.DataFrame) -> pd.DataF
 
     merged["roas"] = merged.apply(
         lambda r: round(r["revenue"] / r["spend"], 4) if r["spend"] > 0 else 0.0, axis=1
-    )
-    merged["cac"] = merged.apply(
-        lambda r: round(r["spend"] / r["deals_count"], 2) if r["deals_count"] > 0 else 0.0, axis=1
     )
     merged["cpl"] = merged.apply(
         lambda r: round(r["spend"] / r["leads"], 2) if r["leads"] > 0 else 0.0, axis=1
@@ -59,14 +50,11 @@ def join_campaign_data(ads_df: pd.DataFrame, deals_df: pd.DataFrame) -> pd.DataF
         lambda r: round(r["clicks"] / r["impressions"], 4) if r["impressions"] > 0 else 0.0, axis=1
     )
 
-    merged["produto"] = merged["campaign_utm"].apply(
-        lambda x: x.split("_")[0] if "_" in str(x) else x
-    )
-
     cols = [
-        "campaign_utm", "campaign_name", "channel", "produto",
-        "spend", "impressions", "clicks", "leads", "revenue", "deals_count",
-        "roas", "cac", "cpl", "cpc", "ctr",
+        "date", "campaign_utm", "campaign_name", "channel",
+        "spend", "impressions", "clicks", "leads", "revenue",
+        "roas", "cpl", "cpc", "ctr",
     ]
-    logger.info("Join concluído: %d campanhas", len(merged))
-    return merged[cols]
+    existing_cols = [c for c in cols if c in merged.columns]
+    logger.info("Join concluído: %d linhas (diário)", len(merged))
+    return merged[existing_cols]

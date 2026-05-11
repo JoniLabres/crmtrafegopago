@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS campaigns_daily (
     ctr             NUMERIC(8, 4) DEFAULT 0,
     created_at      TIMESTAMP DEFAULT NOW(),
     updated_at      TIMESTAMP DEFAULT NOW(),
-    UNIQUE (date, campaign_utm)
+    UNIQUE (date, channel, campaign_utm, produto)
 );
 
 CREATE INDEX IF NOT EXISTS idx_campaigns_date         ON campaigns_daily (date);

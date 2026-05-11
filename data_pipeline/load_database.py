@@ -39,10 +39,8 @@ INSERT INTO campaigns_daily
     (date, channel, campaign_utm, campaign_name, produto,
      spend, impressions, clicks, leads, revenue, roas, cpl, cpc, ctr, updated_at)
 VALUES %s
-ON CONFLICT (date, campaign_utm) DO UPDATE SET
-    channel       = EXCLUDED.channel,
+ON CONFLICT (date, channel, campaign_utm, produto) DO UPDATE SET
     campaign_name = EXCLUDED.campaign_name,
-    produto       = EXCLUDED.produto,
     spend         = EXCLUDED.spend,
     impressions   = EXCLUDED.impressions,
     clicks        = EXCLUDED.clicks,
@@ -144,8 +142,14 @@ def run_pipeline(date_from: date = None, date_to: date = None) -> int:
         consolidated["produto"] = nome  # garante tag do produto
 
         for _, r in consolidated.iterrows():
+            # Usa a data real da linha (dia da campanha), não date_from
+            row_date = r.get("date", "") or str(date_from)
+            try:
+                row_date = str(row_date)[:10]  # garantir formato YYYY-MM-DD
+            except Exception:
+                row_date = str(date_from)
             all_rows.append((
-                date_from,
+                row_date,
                 str(r.get("channel", "")),
                 str(r.get("campaign_utm", "")),
                 str(r.get("campaign_name", "")),
@@ -164,6 +168,28 @@ def run_pipeline(date_from: date = None, date_to: date = None) -> int:
     if not all_rows:
         logger.warning("Pipeline sem linhas para upsert.")
         return 0
+
+    # Deduplicar por (date, channel, campaign_utm, produto) somando métricas
+    cols = ["date","channel","campaign_utm","campaign_name","produto",
+            "spend","impressions","clicks","leads","revenue","roas","cpl","cpc","ctr"]
+    dedup_df = pd.DataFrame(all_rows, columns=cols)
+    key = ["date","channel","campaign_utm","produto"]
+    agg = {
+        "campaign_name": "first",
+        "spend": "sum", "impressions": "sum", "clicks": "sum",
+        "leads": "sum", "revenue": "sum",
+    }
+    dedup_df = dedup_df.groupby(key, as_index=False).agg(agg)
+    dedup_df["roas"] = dedup_df.apply(
+        lambda r: round(r["revenue"]/r["spend"],4) if r["spend"]>0 else 0.0, axis=1)
+    dedup_df["cpl"]  = dedup_df.apply(
+        lambda r: round(r["spend"]/r["leads"],2)   if r["leads"]>0  else 0.0, axis=1)
+    dedup_df["cpc"]  = dedup_df.apply(
+        lambda r: round(r["spend"]/r["clicks"],4)  if r["clicks"]>0 else 0.0, axis=1)
+    dedup_df["ctr"]  = dedup_df.apply(
+        lambda r: round(r["clicks"]/r["impressions"],4) if r["impressions"]>0 else 0.0, axis=1)
+    all_rows = [tuple(row) for row in dedup_df[cols].itertuples(index=False)]
+    logger.info("Rows após deduplicação: %d", len(all_rows))
 
     conn = _get_connection()
     try:

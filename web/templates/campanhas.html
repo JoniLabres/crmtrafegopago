@@ -13,7 +13,24 @@
 
 <!-- Filtros -->
 <div class="panel mb-2">
-  <div class="panel-body flex gap-2" style="flex-wrap:wrap;">
+  <div class="panel-body flex gap-2" style="flex-wrap:wrap;align-items:center;">
+    <!-- Período rápido -->
+    <div class="flex gap-1">
+      {% for d, label in [(7,'7d'),(14,'14d'),(30,'30d'),(90,'90d')] %}
+      <button class="btn btn-sm {% if days == d %}btn-primary{% else %}btn-ghost{% endif %}"
+              onclick="setDays({{ d }})">{{ label }}</button>
+      {% endfor %}
+    </div>
+    <div style="width:1px;height:24px;background:var(--border);"></div>
+    <!-- Datas customizadas -->
+    <input type="date" id="f-date-from" class="input input-dark btn-sm" value="{{ date_from }}"
+           style="border-radius:6px;padding:0.375rem 0.5rem;font-size:0.8rem;">
+    <span style="color:var(--muted);font-size:0.8rem;">até</span>
+    <input type="date" id="f-date-to" class="input input-dark btn-sm" value="{{ date_to }}"
+           style="border-radius:6px;padding:0.375rem 0.5rem;font-size:0.8rem;">
+    <button class="btn btn-outline btn-sm" onclick="applyDateFilter()">Aplicar</button>
+    <div style="width:1px;height:24px;background:var(--border);"></div>
+    <!-- Filtros de canal / produto / busca -->
     <select class="input input-dark btn-sm" id="f-channel" onchange="filterTable()" style="border-radius:6px;padding:0.375rem 0.75rem;font-size:0.8rem;">
       <option value="">Todos os canais</option>
       <option>meta</option><option>google</option><option>linkedin</option><option>tiktok</option>
@@ -22,7 +39,7 @@
       <option value="">Todos os produtos</option>
       {% for p in produtos %}<option>{{ p }}</option>{% endfor %}
     </select>
-    <input class="input input-dark btn-sm" id="f-search" placeholder="Buscar UTM..." oninput="filterTable()" style="border-radius:6px;padding:0.375rem 0.75rem;font-size:0.8rem;min-width:200px;">
+    <input class="input input-dark btn-sm" id="f-search" placeholder="Buscar UTM..." oninput="filterTable()" style="border-radius:6px;padding:0.375rem 0.75rem;font-size:0.8rem;min-width:180px;">
   </div>
 </div>
 
@@ -60,6 +77,22 @@
       <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:3rem;">Nenhuma campanha — execute o pipeline para importar dados</td></tr>
       {% endfor %}
     </tbody>
+    {% if campaigns %}
+    <tfoot>
+      <tr id="totals-row" style="border-top:2px solid var(--primary);font-weight:700;background:rgba(185,255,0,0.04);">
+        <td style="font-size:0.8rem;color:var(--primary);">TOTAL GERAL</td>
+        <td>—</td>
+        <td>—</td>
+        <td id="tot-spend">—</td>
+        <td id="tot-leads">—</td>
+        <td id="tot-revenue">—</td>
+        <td id="tot-roas">—</td>
+        <td id="tot-cpl">—</td>
+        <td id="tot-cpc">—</td>
+        <td id="tot-ctr">—</td>
+      </tr>
+    </tfoot>
+    {% endif %}
   </table>
 </div>
 
@@ -131,6 +164,18 @@
 
 {% block scripts %}
 <script>
+function setDays(d) {
+  const to = new Date();
+  const from = new Date(); from.setDate(from.getDate() - d + 1);
+  const fmt = dt => dt.toISOString().slice(0,10);
+  window.location.href = `/campanhas?days=${d}&date_from=${fmt(from)}&date_to=${fmt(to)}`;
+}
+function applyDateFilter() {
+  const from = document.getElementById('f-date-from').value;
+  const to   = document.getElementById('f-date-to').value;
+  if (!from || !to) return;
+  window.location.href = `/campanhas?date_from=${from}&date_to=${to}&days=0`;
+}
 function filterTable() {
   const ch = document.getElementById('f-channel').value;
   const pr = document.getElementById('f-produto').value;
@@ -141,7 +186,33 @@ function filterTable() {
                  (!s  || row.dataset.utm.includes(s));
     row.style.display = show ? '' : 'none';
   });
+  updateTotals();
 }
+
+function updateTotals() {
+  let spend=0, leads=0, revenue=0, clicks=0, impressions=0;
+  document.querySelectorAll('#campaigns-table tbody tr').forEach(row => {
+    if (row.style.display === 'none') return;
+    const cells = row.querySelectorAll('td');
+    if (cells.length < 10) return;
+    const parseR = s => parseFloat(s.replace(/[^0-9.,-]/g,'').replace(',','.')) || 0;
+    spend      += parseR(cells[3].textContent);
+    leads      += parseInt(cells[4].textContent) || 0;
+    revenue    += parseR(cells[5].textContent);
+  });
+  const tot = document.getElementById('totals-row');
+  if (!tot) return;
+  const cpl  = leads  > 0 ? spend / leads   : 0;
+  const roas = spend  > 0 ? revenue / spend  : 0;
+  document.getElementById('tot-spend').textContent   = 'R$ ' + spend.toFixed(0);
+  document.getElementById('tot-leads').textContent   = leads;
+  document.getElementById('tot-revenue').textContent = 'R$ ' + revenue.toFixed(0);
+  document.getElementById('tot-roas').textContent    = roas.toFixed(2) + 'x';
+  document.getElementById('tot-cpl').textContent     = leads > 0 ? 'R$ ' + cpl.toFixed(2) : '—';
+  document.getElementById('tot-cpc').textContent     = '—';
+  document.getElementById('tot-ctr').textContent     = '—';
+}
+document.addEventListener('DOMContentLoaded', updateTotals);
 
 async function generateUTM() {
   const mes = document.getElementById('u-mes').value || new Date().toISOString().slice(0,7);

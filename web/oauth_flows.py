@@ -203,7 +203,7 @@ async def google_list_accounts(refresh_token: str) -> list[dict]:
         access_token = tr.json().get("access_token", "")
 
         r = await client.get(
-            "https://googleads.googleapis.com/v17/customers:listAccessibleCustomers",
+            "https://googleads.googleapis.com/v20/customers:listAccessibleCustomers",
             headers={
                 "Authorization": f"Bearer {access_token}",
                 "developer-token": os.getenv("GOOGLE_ADS_DEVELOPER_TOKEN", ""),

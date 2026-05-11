@@ -1,14 +1,14 @@
 {
   "produtos": [
     {
-      "nome": "produto-a",
+      "nome": "ixc-acs",
       "contas": {
         "meta": {
           "ad_account_id": "act_1765534214878382",
           "pixel_id": "",
           "access_token_env": "META_ACCESS_TOKEN"
         },
-        "google": { "customer_id": "" },
+        "google": { "customer_id": "2373220827" },
         "linkedin": { "ad_account_id": "", "partner_id": "" },
         "tiktok": { "ad_account_id": "", "pixel_id": "" }
       },
@@ -25,7 +25,7 @@
           "pixel_id": "",
           "access_token_env": "META_ACCESS_TOKEN"
         },
-        "google": { "customer_id": "" },
+        "google": { "customer_id": "4445599999" },
         "linkedin": { "ad_account_id": "", "partner_id": "" },
         "tiktok": { "ad_account_id": "", "pixel_id": "" }
       },
@@ -42,7 +42,7 @@
           "pixel_id": "",
           "access_token_env": "META_ACCESS_TOKEN"
         },
-        "google": { "customer_id": "" },
+        "google": { "customer_id": "4903646825" },
         "linkedin": { "ad_account_id": "", "partner_id": "" },
         "tiktok": { "ad_account_id": "", "pixel_id": "" }
       },
@@ -76,7 +76,24 @@
           "pixel_id": "",
           "access_token_env": "META_ACCESS_TOKEN"
         },
-        "google": { "customer_id": "" },
+        "google": { "customer_id": "2884722752" },
+        "linkedin": { "ad_account_id": "", "partner_id": "" },
+        "tiktok": { "ad_account_id": "", "pixel_id": "" }
+      },
+      "rastreamento": {
+        "ga4_measurement_id": "", "ga4_property_id": "",
+        "gtm_public_id": "", "gtm_container_id": ""
+      }
+    },
+    {
+      "nome": "opa-suite",
+      "contas": {
+        "meta": {
+          "ad_account_id": "act_1152942475308128",
+          "pixel_id": "",
+          "access_token_env": "META_ACCESS_TOKEN"
+        },
+        "google": { "customer_id": "8251196558" },
         "linkedin": { "ad_account_id": "", "partner_id": "" },
         "tiktok": { "ad_account_id": "", "pixel_id": "" }
       },

@@ -162,9 +162,11 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
             spend, leads, revenue, channels, roas = cur.fetchone()
 
             cur.execute(f"""
-                SELECT channel, ROUND(SUM(spend)::numeric,2) AS spend, SUM(leads) AS leads,
-                       ROUND(AVG(roas)::numeric,2) AS roas,
-                       ROUND(AVG(NULLIF(cpl,0))::numeric,2) AS cpl
+                SELECT channel,
+                       COALESCE(ROUND(SUM(spend)::numeric,2), 0) AS spend,
+                       COALESCE(SUM(leads), 0) AS leads,
+                       COALESCE(ROUND(AVG(roas)::numeric,2), 0) AS roas,
+                       COALESCE(ROUND(AVG(NULLIF(cpl,0))::numeric,2), 0) AS cpl
                 FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
                 GROUP BY channel ORDER BY spend DESC
             """, params_base)
@@ -173,10 +175,11 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
 
             cur.execute(f"""
                 SELECT campaign_utm, channel, produto,
-                       ROUND(SUM(spend)::numeric,2) AS spend, SUM(leads) AS leads,
-                       ROUND(SUM(revenue)::numeric,2) AS revenue,
-                       ROUND(AVG(roas)::numeric,2) AS roas,
-                       ROUND(AVG(NULLIF(cpl,0))::numeric,2) AS cpl
+                       COALESCE(ROUND(SUM(spend)::numeric,2), 0) AS spend,
+                       COALESCE(SUM(leads), 0) AS leads,
+                       COALESCE(ROUND(SUM(revenue)::numeric,2), 0) AS revenue,
+                       COALESCE(ROUND(AVG(roas)::numeric,2), 0) AS roas,
+                       COALESCE(ROUND(AVG(NULLIF(cpl,0))::numeric,2), 0) AS cpl
                 FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
                 GROUP BY campaign_utm, channel, produto
                 ORDER BY roas DESC LIMIT 10
@@ -313,22 +316,45 @@ async def conexoes(request: Request):
 async def campanhas(request: Request):
     try:
         _apply_env_overrides()
-        data = _get_dashboard_data(30)
-        all_campaigns = data["top_campaigns"]
+        # Date filter — default: last 7 days (same as dashboard default)
+        from datetime import date as _date, timedelta as _td
+        params = dict(request.query_params)
+        try:
+            days = int(params.get("days", 7))
+        except Exception:
+            days = 7
+        date_to_str   = params.get("date_to",   str(_date.today()))
+        date_from_str = params.get("date_from",  str(_date.today() - _td(days=days - 1)))
+
+        all_campaigns = []
         try:
             import psycopg2
             conn = psycopg2.connect(get_db_url())
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT campaign_utm, channel, produto,
-                           ROUND(SUM(spend)::numeric,2) AS spend, SUM(leads) AS leads,
-                           ROUND(SUM(revenue)::numeric,2) AS revenue,
-                           ROUND(AVG(roas)::numeric,2) AS roas,
-                           ROUND(AVG(NULLIF(cpl,0))::numeric,2) AS cpl,
-                           ROUND(AVG(NULLIF(cpc,0))::numeric,4) AS cpc,
-                           ROUND(AVG(NULLIF(ctr,0))::numeric,4) AS ctr
-                    FROM campaigns_daily GROUP BY campaign_utm, channel, produto ORDER BY spend DESC
-                """)
+                           COALESCE(ROUND(SUM(spend)::numeric,2), 0)       AS spend,
+                           COALESCE(SUM(leads), 0)                          AS leads,
+                           COALESCE(SUM(clicks), 0)                         AS clicks,
+                           COALESCE(SUM(impressions), 0)                    AS impressions,
+                           COALESCE(ROUND(SUM(revenue)::numeric,2), 0)      AS revenue,
+                           COALESCE(ROUND(
+                               CASE WHEN SUM(spend)>0 THEN SUM(revenue)/SUM(spend) ELSE 0 END
+                           ::numeric,2), 0) AS roas,
+                           COALESCE(ROUND(
+                               CASE WHEN SUM(leads)>0 THEN SUM(spend)/SUM(leads) ELSE 0 END
+                           ::numeric,2), 0) AS cpl,
+                           COALESCE(ROUND(
+                               CASE WHEN SUM(clicks)>0 THEN SUM(spend)/SUM(clicks) ELSE 0 END
+                           ::numeric,4), 0) AS cpc,
+                           COALESCE(ROUND(
+                               CASE WHEN SUM(impressions)>0 THEN SUM(clicks)::numeric/SUM(impressions) ELSE 0 END
+                           ::numeric,4), 0) AS ctr
+                    FROM campaigns_daily
+                    WHERE date BETWEEN %s AND %s
+                    GROUP BY campaign_utm, channel, produto
+                    ORDER BY spend DESC
+                """, (date_from_str, date_to_str))
                 cols = [d[0] for d in cur.description]
                 all_campaigns = [dict(zip(cols, r)) for r in cur.fetchall()]
             conn.close()
@@ -341,6 +367,7 @@ async def campanhas(request: Request):
         return templates.TemplateResponse("campanhas.html", {
             "request": request, "page": "campanhas",
             "campaigns": all_campaigns, "produtos": produtos,
+            "date_from": date_from_str, "date_to": date_to_str, "days": days,
             "active_product": _active_product, "alert_count": _get_alert_count(),
         })
     except Exception as exc:
@@ -355,7 +382,10 @@ async def campanhas(request: Request):
 
 @app.get("/alertas", response_class=HTMLResponse)
 async def alertas(request: Request):
+    _apply_env_overrides()
     alerts, stats = [], {"total":0,"critico":0,"atencao":0,"ok":0}
+    # Métricas reais por produto (mês atual) para mostrar progresso vs meta
+    produto_metrics: dict = {}
     try:
         import psycopg2
         conn = psycopg2.connect(get_db_url())
@@ -370,12 +400,46 @@ async def alertas(request: Request):
             stats["total"] = len(alerts)
             for a in alerts:
                 stats[a["severity"]] = stats.get(a["severity"],0) + 1
+            # Métricas do mês atual por produto
+            cur.execute("""
+                SELECT produto,
+                       COALESCE(ROUND(SUM(spend)::numeric,2),0)       AS spend,
+                       COALESCE(SUM(leads),0)                         AS leads,
+                       COALESCE(SUM(clicks),0)                        AS clicks,
+                       COALESCE(COUNT(DISTINCT date),0)               AS dias,
+                       COALESCE(ROUND(AVG(NULLIF(cpl,0))::numeric,2),0) AS cpl_medio
+                FROM campaigns_daily
+                WHERE date >= DATE_TRUNC('month', CURRENT_DATE)
+                  AND produto IS NOT NULL
+                GROUP BY produto
+            """)
+            for row in cur.fetchall():
+                p = row[0]
+                dias = row[4] or 1
+                produto_metrics[p] = {
+                    "spend":     float(row[1]),
+                    "leads":     int(row[2]),
+                    "clicks":    int(row[3]),
+                    "cpl_medio": float(row[5]),
+                    "leads_dia": round(int(row[2]) / dias, 1),
+                }
         conn.close()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("alertas metrics error: %s", exc)
+
+    # Garantir que todos os produtos listados apareçam nas metas
+    thresholds = _load_thresholds()
+    default_t = {"cpl_meta":0.0,"roas_meta":0.0,"mer_meta":0.0,
+                 "leads_meta_diario":0,"budget_mensal":0.0,"frequencia_max_meta":4.0}
+    for p in _list_products():
+        if p not in thresholds:
+            thresholds[p] = default_t.copy()
+
     return templates.TemplateResponse("alertas.html", {
         "request": request, "page": "alertas",
-        "alerts": alerts, "stats": stats, "thresholds": _load_thresholds(),
+        "alerts": alerts, "stats": stats,
+        "thresholds": thresholds,
+        "produto_metrics": produto_metrics,
         "active_product": _active_product, "alert_count": stats.get("critico",0),
     })
 
@@ -842,6 +906,26 @@ async def accounts_tracking(nome: str):
     }
 
 
+@app.get("/api/google/accounts")
+async def google_list_accounts():
+    """Lista sub-contas do MCC do Google Ads para mapear aos produtos."""
+    _apply_env_overrides()
+    try:
+        from google_ads_pull import list_mcc_accounts
+        developer_token = os.getenv("GOOGLE_ADS_DEVELOPER_TOKEN", "")
+        client_id       = os.getenv("GOOGLE_ADS_CLIENT_ID", "")
+        client_secret   = os.getenv("GOOGLE_ADS_CLIENT_SECRET", "")
+        refresh_token   = os.getenv("GOOGLE_ADS_REFRESH_TOKEN", "")
+        mcc_id          = os.getenv("GOOGLE_ADS_CUSTOMER_ID", "")
+        if not all([developer_token, refresh_token, mcc_id]):
+            return JSONResponse({"error": "Credenciais do Google Ads não configuradas"}, status_code=400)
+        accounts = list_mcc_accounts(developer_token, client_id, client_secret, refresh_token, mcc_id)
+        return {"accounts": accounts, "mcc": mcc_id.replace("-", "")}
+    except Exception as e:
+        logger.error("google/accounts error: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.post("/api/accounts/remove")
 async def accounts_remove(request: Request):
     data = await request.json()
@@ -851,6 +935,93 @@ async def accounts_remove(request: Request):
     if not ok and config_store.IS_VERCEL:
         return JSONResponse({"message": "Adicione DATABASE_URL para persistir no Vercel", "error": True}, status_code=500)
     return {"message": f"Produto '{nome}' removido"}
+
+@app.get("/api/google/debug")
+async def google_debug():
+    """Debug endpoint: testa credenciais Google Ads + mostra dados do banco por produto/canal."""
+    _apply_env_overrides()
+    import requests as _req
+    dev_token  = os.getenv("GOOGLE_ADS_DEVELOPER_TOKEN", "")
+    client_id  = os.getenv("GOOGLE_ADS_CLIENT_ID", "")
+    client_sec = os.getenv("GOOGLE_ADS_CLIENT_SECRET", "")
+    ref_token  = os.getenv("GOOGLE_ADS_REFRESH_TOKEN", "")
+    mcc_id     = os.getenv("GOOGLE_ADS_CUSTOMER_ID", "").replace("-", "")
+    result = {
+        "dev_token_set": bool(dev_token),
+        "dev_token_prefix": dev_token[:6] + "..." if dev_token else "",
+        "client_id_set": bool(client_id),
+        "client_secret_set": bool(client_sec),
+        "refresh_token_set": bool(ref_token),
+        "refresh_token_prefix": ref_token[:10] + "..." if ref_token else "",
+        "mcc_id": mcc_id,
+    }
+    if not all([dev_token, client_id, client_sec, ref_token]):
+        result["error"] = "Credenciais incompletas"
+        return result
+    # Step 1: get access token
+    try:
+        tr = _req.post("https://oauth2.googleapis.com/token", data={
+            "client_id": client_id, "client_secret": client_sec,
+            "refresh_token": ref_token, "grant_type": "refresh_token",
+        }, timeout=15)
+        result["token_status"] = tr.status_code
+        if tr.status_code != 200:
+            result["token_error"] = tr.text[:300]
+            return result
+        access_token = tr.json().get("access_token", "")
+        result["access_token_obtained"] = bool(access_token)
+    except Exception as e:
+        result["token_exception"] = str(e)
+        return result
+    # Step 2: listAccessibleCustomers
+    try:
+        r = _req.get(
+            "https://googleads.googleapis.com/v20/customers:listAccessibleCustomers",
+            headers={"Authorization": f"Bearer {access_token}", "developer-token": dev_token},
+            timeout=15,
+        )
+        result["accessible_customers_status"] = r.status_code
+        result["accessible_customers_body"] = r.json() if r.headers.get("content-type","").startswith("application/json") else r.text[:300]
+    except Exception as e:
+        result["accessible_customers_exception"] = str(e)
+    # Step 3: MCC searchStream
+    if mcc_id:
+        try:
+            r2 = _req.post(
+                f"https://googleads.googleapis.com/v20/customers/{mcc_id}/googleAds:searchStream",
+                json={"query": "SELECT customer_client.id, customer_client.descriptive_name FROM customer_client WHERE customer_client.manager = FALSE AND customer_client.status = 'ENABLED'"},
+                headers={"Authorization": f"Bearer {access_token}", "developer-token": dev_token, "login-customer-id": mcc_id},
+                timeout=15,
+            )
+            result["mcc_search_status"] = r2.status_code
+            result["mcc_search_body"] = r2.json() if r2.headers.get("content-type","").startswith("application/json") else r2.text[:500]
+        except Exception as e:
+            result["mcc_search_exception"] = str(e)
+    # DB: spend por produto/canal no período
+    try:
+        import psycopg2
+        conn = psycopg2.connect(get_db_url())
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT produto, channel, date::text,
+                       ROUND(SUM(spend)::numeric,2) AS spend,
+                       SUM(leads) AS leads
+                FROM campaigns_daily
+                WHERE date BETWEEN '2026-05-01' AND '2026-05-11'
+                GROUP BY produto, channel, date
+                ORDER BY produto, channel, date
+            """)
+            rows = cur.fetchall()
+        conn.close()
+        result["db_may_1_11"] = [
+            {"produto": r[0], "channel": r[1], "date": r[2],
+             "spend": float(r[3]), "leads": int(r[4])}
+            for r in rows
+        ]
+    except Exception as e:
+        result["db_error"] = str(e)
+    return result
+
 
 @app.get("/api/pipeline/debug")
 async def pipeline_debug():
@@ -907,9 +1078,28 @@ async def db_test():
         return JSONResponse({"ok": False, "url": safe_url, "error": str(e)}, status_code=500)
 
 
+@app.post("/api/db/clear-campaigns")
+async def db_clear_campaigns():
+    """Apaga todos os dados de campaigns_daily para reprocessamento limpo."""
+    db_url = get_db_url()
+    if not db_url:
+        return JSONResponse({"error": "Banco não configurado"}, status_code=400)
+    try:
+        import psycopg2
+        conn = psycopg2.connect(db_url)
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM campaigns_daily")
+            deleted = cur.rowcount
+        conn.commit()
+        conn.close()
+        return {"message": f"{deleted} linhas removidas de campaigns_daily"}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.post("/api/db/setup")
 async def db_setup():
-    """Create all tables from schema.sql. Safe to run multiple times (CREATE IF NOT EXISTS)."""
+    """Create all tables and run migrations. Safe to run multiple times."""
     db_url = get_db_url()
     if not db_url:
         return JSONResponse({"message": "Banco não configurado (DATABASE_URL / POSTGRES_URL ausente)", "error": True}, status_code=400)
@@ -922,9 +1112,25 @@ async def db_setup():
         sql = schema_path.read_text(encoding="utf-8")
         with conn.cursor() as cur:
             cur.execute(sql)
+            # Migration: fix UNIQUE constraint to include channel and produto
+            cur.execute("""
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1 FROM pg_constraint
+                        WHERE conname = 'campaigns_daily_date_campaign_utm_key'
+                    ) THEN
+                        ALTER TABLE campaigns_daily
+                            DROP CONSTRAINT campaigns_daily_date_campaign_utm_key;
+                        ALTER TABLE campaigns_daily
+                            ADD CONSTRAINT campaigns_daily_date_channel_utm_produto_key
+                            UNIQUE (date, channel, campaign_utm, produto);
+                    END IF;
+                END $$;
+            """)
         conn.commit()
         conn.close()
-        return {"message": "Banco configurado: tabelas campaigns_daily, alerts_log e ixc_config criadas (ou já existiam)"}
+        return {"message": "Banco configurado: tabelas e migrações aplicadas com sucesso"}
     except Exception as e:
         logger.error("db/setup error: %s", e)
         return JSONResponse({"message": f"Erro ao configurar banco: {e}", "error": True}, status_code=500)
@@ -976,6 +1182,7 @@ def _base_url(request: Request) -> str:
 
 @app.get("/auth/connect/{channel}")
 async def auth_connect(channel: str, request: Request):
+    _apply_env_overrides()
     from oauth_flows import meta_auth_url, google_auth_url, linkedin_auth_url, tiktok_auth_url
 
     client_id_var = _CHANNEL_CLIENT_ID_VARS.get(channel)
@@ -1001,6 +1208,7 @@ async def auth_connect(channel: str, request: Request):
 
 @app.get("/auth/callback/{channel}")
 async def auth_callback(channel: str, request: Request):
+    _apply_env_overrides()
     from oauth_flows import (
         verify_state,
         meta_exchange, meta_list_accounts,
@@ -1043,7 +1251,26 @@ async def auth_callback(channel: str, request: Request):
             refresh_token = token_data.get("refresh_token", "")
             if refresh_token:
                 _save_env_token("GOOGLE_ADS_REFRESH_TOKEN", refresh_token)
-            accounts = await google_list_accounts(refresh_token) if refresh_token else []
+            # Try MCC listing first, fallback to listAccessibleCustomers
+            accounts = []
+            developer_token = os.getenv("GOOGLE_ADS_DEVELOPER_TOKEN", "")
+            client_id       = os.getenv("GOOGLE_ADS_CLIENT_ID", "")
+            client_secret   = os.getenv("GOOGLE_ADS_CLIENT_SECRET", "")
+            mcc_id          = os.getenv("GOOGLE_ADS_CUSTOMER_ID", "")
+            rt = refresh_token or os.getenv("GOOGLE_ADS_REFRESH_TOKEN", "")
+            if developer_token and rt and mcc_id:
+                try:
+                    from google_ads_pull import list_mcc_accounts
+                    raw = list_mcc_accounts(developer_token, client_id, client_secret, rt, mcc_id)
+                    accounts = [{"id": a["id"], "name": a.get("name", a["id"])} for a in raw]
+                except Exception as gexc:
+                    logger.warning("MCC listing fallback: %s", gexc)
+            if not accounts and rt:
+                try:
+                    raw = await google_list_accounts(rt)
+                    accounts = [{"id": a["id"], "name": a.get("name", a["id"])} for a in raw]
+                except Exception:
+                    pass
 
         elif channel == "linkedin":
             token_data = await linkedin_exchange(code, base)
@@ -1181,6 +1408,13 @@ async def gtm_publish(request: Request):
 
 def _save_env_token(key: str, value: str):
     os.environ[key] = value
+    # Always persist to ixc_config so it survives across serverless requests
+    try:
+        existing = _load_env_overrides()
+        existing[key] = value
+        config_store.save("env_overrides", existing, None)
+    except Exception as exc:
+        logger.warning("_save_env_token DB persist failed [%s]: %s", key, exc)
     if not config_store.IS_VERCEL:
         try:
             if not ENV_PATH.exists():
