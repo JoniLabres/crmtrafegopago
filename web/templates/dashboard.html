@@ -30,13 +30,20 @@
         {% endfor %}
       </select>
 
-      <select name="days" class="input input-dark" style="width:auto;padding:0.4rem 0.75rem;font-size:0.875rem;" onchange="this.form.submit()">
+      <select name="days" id="days-select" class="input input-dark" style="width:auto;padding:0.4rem 0.75rem;font-size:0.875rem;" onchange="handleDaysChange(this)">
         <option value="7"  {% if days == 7  %}selected{% endif %}>7 dias</option>
         <option value="14" {% if days == 14 %}selected{% endif %}>14 dias</option>
         <option value="30" {% if days == 30 %}selected{% endif %}>30 dias</option>
         <option value="60" {% if days == 60 %}selected{% endif %}>60 dias</option>
         <option value="90" {% if days == 90 %}selected{% endif %}>90 dias</option>
+        <option value="custom" {% if days not in [7,14,30,60,90] %}selected{% endif %}>Personalizado</option>
       </select>
+      <div id="custom-dates" style="display:{% if days not in [7,14,30,60,90] %}flex{% else %}none{% endif %};gap:0.4rem;align-items:center;">
+        <input type="date" name="date_from" class="input input-dark" style="padding:0.4rem 0.6rem;font-size:0.875rem;" value="{{ date_from or '' }}">
+        <span style="color:var(--muted);font-size:0.8rem;">até</span>
+        <input type="date" name="date_to" class="input input-dark" style="padding:0.4rem 0.6rem;font-size:0.875rem;" value="{{ date_to or '' }}">
+        <button type="submit" class="btn btn-outline btn-sm">Aplicar</button>
+      </div>
 
       {% if produto_filtro %}
       <a href="/" class="btn btn-ghost btn-sm" style="white-space:nowrap;">Limpar filtro</a>
@@ -295,6 +302,16 @@ async function syncData(btn) {
     showToast('Erro de rede', 'error');
     btn.textContent = orig;
     btn.disabled = false;
+  }
+}
+
+function handleDaysChange(sel) {
+  const custom = document.getElementById('custom-dates');
+  if (sel.value === 'custom') {
+    custom.style.display = 'flex';
+  } else {
+    custom.style.display = 'none';
+    sel.form.submit();
   }
 }
 

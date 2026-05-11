@@ -211,13 +211,30 @@ def _get_alert_count():
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
+    _apply_env_overrides()
     params = request.query_params
-    try:
-        days = int(params.get("days", 30))
-        days = max(7, min(days, 365))
-    except ValueError:
-        days = 30
     produto = params.get("produto", "").strip()
+    date_from_str = params.get("date_from", "").strip()
+    date_to_str   = params.get("date_to", "").strip()
+
+    if date_from_str and date_to_str:
+        # Custom date range: convert to days relative to today for the DB query
+        try:
+            from datetime import date as _date
+            df = _date.fromisoformat(date_from_str)
+            dt = _date.fromisoformat(date_to_str)
+            days = (_date.today() - df).days + 1
+            days = max(1, min(days, 730))
+        except ValueError:
+            days = 30
+            date_from_str = date_to_str = ""
+    else:
+        try:
+            days = int(params.get("days", 30))
+            days = max(7, min(days, 365))
+        except ValueError:
+            days = 30
+        date_from_str = date_to_str = ""
 
     data = _get_dashboard_data(days, produto)
     ltv_all = _load_ltv()
@@ -249,6 +266,8 @@ async def dashboard(request: Request):
     return templates.TemplateResponse("dashboard.html", {
         "request": request, "page": "dashboard", "days": days,
         "produto_filtro": produto,
+        "date_from": date_from_str,
+        "date_to":   date_to_str,
         "produtos": produtos,
         "active_product": _active_product, "alert_count": _get_alert_count(),
         "ltv": ltv_filtered,

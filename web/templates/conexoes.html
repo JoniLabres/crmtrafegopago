@@ -604,9 +604,6 @@
 .conn-body { display:flex; flex-direction:column; gap:0.75rem; padding:1.25rem; }
 </style>
 <script>
-// Initialize date pickers with last 7 days
-(function(){ setDays(7); })();
-
 // Show OAuth success toast if redirected back from OAuth
 (function(){
   const p = new URLSearchParams(location.search);
@@ -841,6 +838,9 @@ async function runPipeline() {
     showToast('Erro de rede', 'error');
   }
 }
+// Initialize date pickers after all functions are defined
+document.addEventListener('DOMContentLoaded', function(){ setDays(7); });
+
 async function createHubSpotProps() {
   const out = document.getElementById('action-output');
   out.style.display = 'block'; out.textContent = 'Criando propriedades no HubSpot...';
