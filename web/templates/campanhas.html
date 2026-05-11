@@ -76,7 +76,7 @@
         <td>{{ "{:,.0f}".format(c.impressions).replace(",",".") }}</td>
         <td>{{ "{:,.0f}".format(c.clicks).replace(",",".") }}</td>
         <td>{{ "%.2f"|format(c.ctr * 100) }}%</td>
-        <td>R$ {{ "%.4f"|format(c.cpc) }}</td>
+        <td>R$ {{ "%.2f"|format(c.cpc) }}</td>
         <td>{{ c.leads }}</td>
         <td>R$ {{ "%.2f"|format(c.cpl) }}</td>
         <td>R$ {{ "%.0f"|format(c.revenue) }}</td>
@@ -224,7 +224,7 @@ function updateTotals() {
   document.getElementById('tot-impressions').textContent = impressions.toLocaleString('pt-BR');
   document.getElementById('tot-clicks').textContent      = clicks.toLocaleString('pt-BR');
   document.getElementById('tot-ctr').textContent         = ctr.toFixed(2) + '%';
-  document.getElementById('tot-cpc').textContent         = clicks > 0 ? 'R$ ' + cpc.toFixed(4) : '—';
+  document.getElementById('tot-cpc').textContent         = clicks > 0 ? 'R$ ' + cpc.toFixed(2) : '—';
   document.getElementById('tot-leads').textContent       = leads;
   document.getElementById('tot-cpl').textContent         = leads > 0 ? 'R$ ' + cpl.toFixed(2) : '—';
   document.getElementById('tot-revenue').textContent     = 'R$ ' + revenue.toFixed(0);
