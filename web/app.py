@@ -1479,9 +1479,11 @@ async def slack_events(request: Request, background_tasks: BackgroundTasks):
     timestamp = request.headers.get("X-Slack-Request-Timestamp", "0")
     signature = request.headers.get("X-Slack-Signature", "")
     if not _verify_slack_sig(body, timestamp, signature):
+        logger.warning("Slack: assinatura inválida")
         return JSONResponse({"error": "invalid signature"}, status_code=403)
 
     data = json.loads(body)
+    logger.info("Slack event recebido: type=%s", data.get("type"))
 
     # Handshake de verificação do Slack
     if data.get("type") == "url_verification":
@@ -1489,28 +1491,51 @@ async def slack_events(request: Request, background_tasks: BackgroundTasks):
 
     event = data.get("event", {})
     event_type = event.get("type", "")
+    logger.info("Slack event: %s bot_id=%s subtype=%s", event_type,
+                event.get("bot_id"), event.get("subtype"))
 
     if event_type in ("message", "app_mention"):
-        # Ignora mensagens do próprio bot
+        # Ignora mensagens do próprio bot e retries já processados
         if event.get("bot_id") or event.get("subtype") == "bot_message":
             return {"ok": True}
+        if request.headers.get("X-Slack-Retry-Num"):
+            return {"ok": True}
 
-        channel  = event.get("channel", "")
-        text     = event.get("text", "").strip()
-        user_id  = event.get("user", "unknown")
-        # Responde no mesmo thread se existir, senão usa o ts da mensagem como thread
+        channel   = event.get("channel", "")
+        text      = event.get("text", "").strip()
+        user_id   = event.get("user", "unknown")
         thread_ts = event.get("thread_ts") or event.get("ts", "")
 
         if not text or not channel:
             return {"ok": True}
 
-        # Remove menção @bot do início se houver
         import re
         text = re.sub(r"<@[A-Z0-9]+>\s*", "", text).strip()
+        if not text:
+            return {"ok": True}
 
+        logger.info("Slack mensagem de %s no canal %s: %s", user_id, channel, text[:80])
+
+        # Confirma recebimento ao usuário imediatamente
+        _slack_post(channel, "⏳ Processando...", thread_ts)
+
+        # Processa e responde em background
         background_tasks.add_task(_process_slack_message, channel, text, user_id, thread_ts)
 
     return {"ok": True}
+
+
+@app.get("/api/slack/test")
+async def slack_test(channel: str = None):
+    """Envia uma mensagem de teste ao Slack para verificar se o Bot Token está funcionando."""
+    _apply_env_overrides()
+    token = os.getenv("SLACK_BOT_TOKEN", "")
+    if not token:
+        return JSONResponse({"error": "SLACK_BOT_TOKEN não configurado"}, status_code=400)
+    if not channel:
+        return JSONResponse({"error": "Passe ?channel=CXXXXXXX (ID do canal)"}, status_code=400)
+    ok = _slack_post(channel, "✅ Midas IA conectado! Bot Token funcionando.")
+    return {"ok": ok, "channel": channel, "token_prefix": token[:12] + "..."}
 
 
 @app.get("/api/db/test")
