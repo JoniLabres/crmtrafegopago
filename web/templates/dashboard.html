@@ -10,30 +10,43 @@
       <span style="font-size:0.65em;font-weight:500;color:var(--primary);background:rgba(163,255,0,0.1);padding:0.2rem 0.6rem;border-radius:50px;margin-left:0.5rem;">{{ produto_filtro }}</span>
       {% endif %}
     </h1>
-    <p class="page-desc">Desempenho consolidado dos últimos {{ days }} dias{% if produto_filtro %} · filtrado por produto{% endif %}</p>
+    <p class="page-desc">
+      Desempenho consolidado dos últimos {{ days }} dias{% if produto_filtro %} · filtrado por produto{% endif %}
+      {% if last_sync %}
+      · <span id="last-sync-label" style="color:var(--muted);font-size:0.8em;" title="{{ last_sync }}">atualizado {{ last_sync[:10] }}</span>
+      {% else %}
+      · <span style="color:var(--muted);font-size:0.8em;">sem dados sincronizados</span>
+      {% endif %}
+    </p>
   </div>
 
-  <!-- Filtros -->
-  <form method="GET" action="/" style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;">
-    <select name="produto" class="input input-dark" style="width:auto;min-width:160px;padding:0.4rem 0.75rem;font-size:0.875rem;" onchange="this.form.submit()">
-      <option value="">Todos os produtos</option>
-      {% for p in produtos %}
-      <option value="{{ p }}" {% if p == produto_filtro %}selected{% endif %}>{{ p }}</option>
-      {% endfor %}
-    </select>
+  <!-- Filtros + Sincronizar -->
+  <div style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;">
+    <form method="GET" action="/" style="display:contents;">
+      <select name="produto" class="input input-dark" style="width:auto;min-width:160px;padding:0.4rem 0.75rem;font-size:0.875rem;" onchange="this.form.submit()">
+        <option value="">Todos os produtos</option>
+        {% for p in produtos %}
+        <option value="{{ p }}" {% if p == produto_filtro %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select>
 
-    <select name="days" class="input input-dark" style="width:auto;padding:0.4rem 0.75rem;font-size:0.875rem;" onchange="this.form.submit()">
-      <option value="7"  {% if days == 7  %}selected{% endif %}>7 dias</option>
-      <option value="14" {% if days == 14 %}selected{% endif %}>14 dias</option>
-      <option value="30" {% if days == 30 %}selected{% endif %}>30 dias</option>
-      <option value="60" {% if days == 60 %}selected{% endif %}>60 dias</option>
-      <option value="90" {% if days == 90 %}selected{% endif %}>90 dias</option>
-    </select>
+      <select name="days" class="input input-dark" style="width:auto;padding:0.4rem 0.75rem;font-size:0.875rem;" onchange="this.form.submit()">
+        <option value="7"  {% if days == 7  %}selected{% endif %}>7 dias</option>
+        <option value="14" {% if days == 14 %}selected{% endif %}>14 dias</option>
+        <option value="30" {% if days == 30 %}selected{% endif %}>30 dias</option>
+        <option value="60" {% if days == 60 %}selected{% endif %}>60 dias</option>
+        <option value="90" {% if days == 90 %}selected{% endif %}>90 dias</option>
+      </select>
 
-    {% if produto_filtro %}
-    <a href="/" class="btn btn-ghost btn-sm" style="white-space:nowrap;">Limpar filtro</a>
-    {% endif %}
-  </form>
+      {% if produto_filtro %}
+      <a href="/" class="btn btn-ghost btn-sm" style="white-space:nowrap;">Limpar filtro</a>
+      {% endif %}
+    </form>
+
+    <button id="sync-btn" class="btn btn-outline btn-sm" onclick="syncData(this)" style="white-space:nowrap;">
+      ↻ Sincronizar
+    </button>
+  </div>
 </div>
 
 <!-- KPIs de Mídia -->
@@ -268,6 +281,23 @@
 .text-danger { color: #ff5050; }
 </style>
 <script>
+async function syncData(btn) {
+  const orig = btn.textContent;
+  btn.textContent = '↻ Sincronizando...';
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/pipeline/sync', { method: 'POST' });
+    const d = await r.json();
+    showToast(d.message || 'Sincronizado', r.ok ? 'ok' : 'error');
+    if (r.ok) setTimeout(() => location.reload(), 1200);
+    else { btn.textContent = orig; btn.disabled = false; }
+  } catch(e) {
+    showToast('Erro de rede', 'error');
+    btn.textContent = orig;
+    btn.disabled = false;
+  }
+}
+
 async function refreshLtv(btn) {
   const orig = btn.textContent;
   btn.textContent = 'Calculando...';

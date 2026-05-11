@@ -101,10 +101,28 @@ def _load_thresholds():
 
 
 def _list_products() -> list[str]:
-    data = config_store.load("products", PRODUCTS_PATH, {"produtos": []})
-    if isinstance(data, dict):
-        return [p["nome"] for p in data.get("produtos", [])]
-    return []
+    """Merge product names from products.json and accounts.json so both sources are covered."""
+    names: set[str] = set()
+    for key, path in [("products", PRODUCTS_PATH), ("accounts", ACCOUNTS_PATH)]:
+        data = config_store.load(key, path, {"produtos": []})
+        if isinstance(data, dict):
+            names.update(p["nome"] for p in data.get("produtos", []) if p.get("nome"))
+    return sorted(names)
+
+
+def _get_last_sync() -> str:
+    """Return ISO timestamp of last successful pipeline run, or empty string."""
+    data = config_store.load("pipeline_last_sync", None, {})
+    return data.get("synced_at", "") if isinstance(data, dict) else ""
+
+
+def _save_last_sync(total: int, date_from, date_to) -> None:
+    config_store.save("pipeline_last_sync", {
+        "synced_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "rows": total,
+        "date_from": str(date_from),
+        "date_to": str(date_to),
+    }, None)
 
 
 def _get_dashboard_data(days: int = 30, produto: str = ""):
@@ -233,6 +251,7 @@ async def dashboard(request: Request):
         "produtos": produtos,
         "active_product": _active_product, "alert_count": _get_alert_count(),
         "ltv": ltv_filtered,
+        "last_sync": _get_last_sync(),
         **data,
     })
 
@@ -492,10 +511,56 @@ async def pipeline_run(request: Request):
             date_from = date_to - timedelta(days=days)
 
         total = run_pipeline(date_from=date_from, date_to=date_to)
+        _save_last_sync(total, date_from, date_to)
         return {"message": f"Pipeline concluído: {total} campanhas carregadas ({date_from} → {date_to}, {len(accounts)} produto(s))"}
     except Exception as e:
         logger.error("Pipeline error: %s", e, exc_info=True)
         return JSONResponse({"message": f"Erro: {e}"}, status_code=500)
+
+
+@app.get("/api/pipeline/cron")
+@app.post("/api/pipeline/cron")
+async def pipeline_cron(request: Request):
+    """Called by Vercel Cron. Verifies CRON_SECRET header then runs pipeline for last 2 days."""
+    cron_secret = os.getenv("CRON_SECRET", "")
+    if cron_secret:
+        auth = request.headers.get("authorization", "")
+        if auth != f"Bearer {cron_secret}":
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+    try:
+        from load_database import run_pipeline, _load_accounts
+        from datetime import date, timedelta
+        _apply_env_overrides()
+        date_to   = date.today()
+        date_from = date_to - timedelta(days=2)
+        total = run_pipeline(date_from=date_from, date_to=date_to)
+        _save_last_sync(total, date_from, date_to)
+        logger.info("Cron pipeline OK: %d rows", total)
+        return {"ok": True, "rows": total, "date_from": str(date_from), "date_to": str(date_to)}
+    except Exception as e:
+        logger.error("Cron pipeline error: %s", e, exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/pipeline/sync")
+async def pipeline_sync(request: Request):
+    """Quick sync for last 2 days — called from dashboard Sync button."""
+    try:
+        from load_database import run_pipeline, _load_accounts
+        from datetime import date, timedelta
+        _apply_env_overrides()
+        accounts = _load_accounts()
+        if not accounts:
+            return JSONResponse({"message": "Nenhum produto configurado."}, status_code=400)
+        date_to   = date.today()
+        date_from = date_to - timedelta(days=2)
+        total = run_pipeline(date_from=date_from, date_to=date_to)
+        _save_last_sync(total, date_from, date_to)
+        return {"message": f"{total} registros sincronizados"}
+    except Exception as e:
+        logger.error("Sync error: %s", e, exc_info=True)
+        return JSONResponse({"message": f"Erro: {e}"}, status_code=500)
+
 
 @app.post("/api/hubspot/create-properties")
 async def hs_create_props():
