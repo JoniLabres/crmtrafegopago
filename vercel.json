@@ -17,11 +17,5 @@
     "api/index.py": {
       "maxDuration": 300
     }
-  },
-  "crons": [
-    {
-      "path": "/api/pipeline/cron",
-      "schedule": "0 9 * * *"
-    }
-  ]
+  }
 }
