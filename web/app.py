@@ -1363,6 +1363,25 @@ async def debug_compare(date_from: str = None, date_to: str = None):
     return result
 
 
+@app.get("/api/debug/dashboard")
+async def debug_dashboard(days: int = 30):
+    """Retorna o dict kpis + colunas da tabela como JSON para diagnóstico."""
+    data = _get_dashboard_data(days)
+    kpis = data.get("kpis", {})
+    by_ch = data.get("by_channel", [])
+    top = data.get("top_campaigns", [])
+    return {
+        "kpis_keys": list(kpis.keys()),
+        "kpis": kpis,
+        "by_channel_sample": by_ch[:2],
+        "top_campaigns_sample": [
+            {k: v for k, v in c.items() if k in ("campaign_utm","spend","mqls","sqls","deals_closed")}
+            for c in top[:3]
+        ],
+        "by_channel_has_mqls": all("mqls" in r for r in by_ch) if by_ch else "no rows",
+    }
+
+
 @app.get("/api/debug/pull")
 async def debug_pull(produto: str = "ixc-provedor", channel: str = "meta",
                      date_from: str = None, date_to: str = None):
