@@ -38,7 +38,7 @@ UPSERT_SQL = """
 INSERT INTO campaigns_daily
     (date, channel, campaign_utm, campaign_name, produto,
      spend, impressions, clicks, leads, revenue, roas, cpl, cpc, ctr,
-     mqls, sqls, deals_closed, updated_at)
+     mqls, sqls, sals, deals_closed, updated_at)
 VALUES %s
 ON CONFLICT (date, channel, campaign_utm, produto) DO UPDATE SET
     campaign_name = EXCLUDED.campaign_name,
@@ -53,6 +53,7 @@ ON CONFLICT (date, channel, campaign_utm, produto) DO UPDATE SET
     ctr           = EXCLUDED.ctr,
     mqls          = EXCLUDED.mqls,
     sqls          = EXCLUDED.sqls,
+    sals          = EXCLUDED.sals,
     deals_closed  = EXCLUDED.deals_closed,
     updated_at    = NOW();
 """
@@ -179,6 +180,7 @@ def run_pipeline(date_from: date = None, date_to: date = None) -> int:
                 float(r.get("ctr", 0)),
                 int(r.get("mqls", 0)),
                 int(r.get("sqls", 0)),
+                int(r.get("sals", 0)),
                 int(r.get("deals_closed", 0)),
             ))
 
@@ -189,14 +191,14 @@ def run_pipeline(date_from: date = None, date_to: date = None) -> int:
     # Deduplicar por (date, channel, campaign_utm, produto) somando métricas
     cols = ["date","channel","campaign_utm","campaign_name","produto",
             "spend","impressions","clicks","leads","revenue","roas","cpl","cpc","ctr",
-            "mqls","sqls","deals_closed"]
+            "mqls","sqls","sals","deals_closed"]
     dedup_df = pd.DataFrame(all_rows, columns=cols)
     key = ["date","channel","campaign_utm","produto"]
     agg = {
         "campaign_name": "first",
         "spend": "sum", "impressions": "sum", "clicks": "sum",
         "leads": "sum", "revenue": "sum",
-        "mqls": "sum", "sqls": "sum", "deals_closed": "sum",
+        "mqls": "sum", "sqls": "sum", "sals": "sum", "deals_closed": "sum",
     }
     dedup_df = dedup_df.groupby(key, as_index=False).agg(agg)
     dedup_df["roas"] = dedup_df.apply(

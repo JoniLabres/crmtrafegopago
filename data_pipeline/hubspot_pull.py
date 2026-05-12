@@ -85,6 +85,7 @@ class HubSpotPuller:
         for lifecycle, key in [
             ("marketingqualifiedlead", "mqls"),
             ("salesqualifiedlead",     "sqls"),
+            ("salesacceptedlead",      "sals"),
         ]:
             try:
                 contacts = self._search("contacts", [
@@ -95,13 +96,13 @@ class HubSpotPuller:
                 for c in contacts:
                     utm = (c.get("properties", {}).get("utm_campaign") or "").strip()
                     if utm:
-                        utm_data.setdefault(utm, {"mqls": 0, "sqls": 0})
+                        utm_data.setdefault(utm, {"mqls": 0, "sqls": 0, "sals": 0})
                         utm_data[utm][key] += 1
             except Exception as e:
                 logger.warning("fetch_funnel_metrics [%s]: %s", lifecycle, e)
 
         if not utm_data:
-            return pd.DataFrame(columns=["campaign_utm", "mqls", "sqls"])
+            return pd.DataFrame(columns=["campaign_utm", "mqls", "sqls", "sals"])
         return pd.DataFrame([{"campaign_utm": k, **v} for k, v in utm_data.items()])
 
     def fetch_deals(self, date_from: date, date_to: date) -> pd.DataFrame:

@@ -164,13 +164,14 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
             spend, leads, revenue, channels, roas, impressions, clicks = cur.fetchone()
 
             # Funil CRM — colunas adicionadas via migration; fallback para 0 se não existirem
-            mqls = sqls = deals_closed = 0
+            mqls = sqls = sals = deals_closed = 0
             try:
                 cur.execute(f"""
-                    SELECT COALESCE(SUM(mqls),0), COALESCE(SUM(sqls),0), COALESCE(SUM(deals_closed),0)
+                    SELECT COALESCE(SUM(mqls),0), COALESCE(SUM(sqls),0),
+                           COALESCE(SUM(sals),0), COALESCE(SUM(deals_closed),0)
                     FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
                 """, params_base)
-                mqls, sqls, deals_closed = cur.fetchone()
+                mqls, sqls, sals, deals_closed = cur.fetchone()
             except Exception:
                 conn.rollback()
 
@@ -202,24 +203,26 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
             try:
                 cur.execute(f"""
                     SELECT channel,
-                           COALESCE(SUM(mqls),0) AS mqls,
-                           COALESCE(SUM(sqls),0) AS sqls,
-                           COALESCE(SUM(deals_closed),0) AS deals_closed
+                           COALESCE(SUM(mqls),0), COALESCE(SUM(sqls),0),
+                           COALESCE(SUM(sals),0), COALESCE(SUM(deals_closed),0)
                     FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
                     GROUP BY channel
                 """, params_base)
-                funnel_by_ch = {r[0]: {"mqls": int(r[1]), "sqls": int(r[2]), "deals_closed": int(r[3])}
+                funnel_by_ch = {r[0]: {"mqls": int(r[1]), "sqls": int(r[2]),
+                                       "sals": int(r[3]), "deals_closed": int(r[4])}
                                 for r in cur.fetchall()}
                 for row in by_channel:
                     f = funnel_by_ch.get(row["channel"], {})
                     row["mqls"]         = f.get("mqls", 0)
                     row["sqls"]         = f.get("sqls", 0)
+                    row["sals"]         = f.get("sals", 0)
                     row["deals_closed"] = f.get("deals_closed", 0)
             except Exception:
                 conn.rollback()
                 for row in by_channel:
                     row.setdefault("mqls", 0)
                     row.setdefault("sqls", 0)
+                    row.setdefault("sals", 0)
                     row.setdefault("deals_closed", 0)
 
             cur.execute(f"""
@@ -246,19 +249,21 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
             try:
                 cur.execute(f"""
                     SELECT campaign_utm,
-                           COALESCE(SUM(mqls),0), COALESCE(SUM(sqls),0), COALESCE(SUM(deals_closed),0)
+                           COALESCE(SUM(mqls),0), COALESCE(SUM(sqls),0),
+                           COALESCE(SUM(sals),0), COALESCE(SUM(deals_closed),0)
                     FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
                     GROUP BY campaign_utm
                 """, params_base)
-                funnel_by_utm = {r[0]: (int(r[1]), int(r[2]), int(r[3])) for r in cur.fetchall()}
+                funnel_by_utm = {r[0]: (int(r[1]), int(r[2]), int(r[3]), int(r[4])) for r in cur.fetchall()}
                 for row in top_campaigns:
-                    f = funnel_by_utm.get(row["campaign_utm"], (0, 0, 0))
-                    row["mqls"], row["sqls"], row["deals_closed"] = f
+                    f = funnel_by_utm.get(row["campaign_utm"], (0, 0, 0, 0))
+                    row["mqls"], row["sqls"], row["sals"], row["deals_closed"] = f
             except Exception:
                 conn.rollback()
                 for row in top_campaigns:
                     row.setdefault("mqls", 0)
                     row.setdefault("sqls", 0)
+                    row.setdefault("sals", 0)
                     row.setdefault("deals_closed", 0)
 
             # Alerts are not filtered by product (show all)
@@ -281,7 +286,7 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
                      "mer": mer, "deals": int(deals_closed), "roas_meta": 4.0,
                      "impressions": int(impressions), "clicks": int(clicks),
                      "ctr": ctr_geral, "cpc": cpc_geral,
-                     "mqls": int(mqls), "sqls": int(sqls), "deals_closed": int(deals_closed)},
+                     "mqls": int(mqls), "sqls": int(sqls), "sals": int(sals), "deals_closed": int(deals_closed)},
             "by_channel": by_channel, "top_campaigns": top_campaigns, "alerts": alerts,
         }
     except Exception as e:
@@ -289,7 +294,7 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
         return {
             "kpis": {"spend":0,"leads":0,"revenue":0,"channels":0,"roas":0,"cpl":0,"mer":0,"deals":0,
                      "roas_meta":4.0,"impressions":0,"clicks":0,"ctr":0,"cpc":0,
-                     "mqls":0,"sqls":0,"deals_closed":0},
+                     "mqls":0,"sqls":0,"sals":0,"deals_closed":0},
             "by_channel": [], "top_campaigns": [], "alerts": [],
         }
 
@@ -445,20 +450,22 @@ async def campanhas(request: Request):
                 try:
                     cur.execute("""
                         SELECT campaign_utm,
-                               COALESCE(SUM(mqls),0), COALESCE(SUM(sqls),0), COALESCE(SUM(deals_closed),0)
+                               COALESCE(SUM(mqls),0), COALESCE(SUM(sqls),0),
+                               COALESCE(SUM(sals),0), COALESCE(SUM(deals_closed),0)
                         FROM campaigns_daily
                         WHERE date BETWEEN %s AND %s
                         GROUP BY campaign_utm
                     """, (date_from_str, date_to_str))
-                    funnel_map = {r[0]: (int(r[1]), int(r[2]), int(r[3])) for r in cur.fetchall()}
+                    funnel_map = {r[0]: (int(r[1]), int(r[2]), int(r[3]), int(r[4])) for r in cur.fetchall()}
                     for c in all_campaigns:
-                        f = funnel_map.get(c["campaign_utm"], (0, 0, 0))
-                        c["mqls"], c["sqls"], c["deals_closed"] = f
+                        f = funnel_map.get(c["campaign_utm"], (0, 0, 0, 0))
+                        c["mqls"], c["sqls"], c["sals"], c["deals_closed"] = f
                 except Exception:
                     conn.rollback()
                     for c in all_campaigns:
                         c.setdefault("mqls", 0)
                         c.setdefault("sqls", 0)
+                        c.setdefault("sals", 0)
                         c.setdefault("deals_closed", 0)
 
             conn.close()
@@ -1715,11 +1722,12 @@ async def db_setup():
                     END IF;
                 END $$;
             """)
-            # Migration: adiciona colunas MQL/SQL/deals_closed se não existirem
+            # Migration: adiciona colunas de funil se não existirem
             cur.execute("""
                 ALTER TABLE campaigns_daily
                     ADD COLUMN IF NOT EXISTS mqls         INTEGER DEFAULT 0,
                     ADD COLUMN IF NOT EXISTS sqls         INTEGER DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS sals         INTEGER DEFAULT 0,
                     ADD COLUMN IF NOT EXISTS deals_closed INTEGER DEFAULT 0;
             """)
         conn.commit()

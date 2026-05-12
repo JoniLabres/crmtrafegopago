@@ -43,7 +43,7 @@ def join_campaign_data(ads_df: pd.DataFrame, deals_df: pd.DataFrame,
         merged = merged.merge(funnel_df, on="campaign_utm", how="left")
     merged["mqls"] = merged.get("mqls", pd.Series(0, index=merged.index)).fillna(0).astype(int)
     merged["sqls"] = merged.get("sqls", pd.Series(0, index=merged.index)).fillna(0).astype(int)
-    # deals_closed = negócios fechados por campanha (do join com HubSpot deals)
+    merged["sals"] = merged.get("sals", pd.Series(0, index=merged.index)).fillna(0).astype(int)
     merged["deals_closed"] = merged["deals_count"]
 
     merged["roas"] = merged.apply(
@@ -63,7 +63,7 @@ def join_campaign_data(ads_df: pd.DataFrame, deals_df: pd.DataFrame,
         "date", "campaign_utm", "campaign_name", "channel",
         "spend", "impressions", "clicks", "leads", "revenue",
         "roas", "cpl", "cpc", "ctr",
-        "mqls", "sqls", "deals_closed",
+        "mqls", "sqls", "sals", "deals_closed",
     ]
     existing_cols = [c for c in cols if c in merged.columns]
     logger.info("Join concluído: %d linhas (diário)", len(merged))

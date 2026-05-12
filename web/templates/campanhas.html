@@ -58,6 +58,7 @@
         <th>Leads</th>
         <th>MQL</th>
         <th>SQL</th>
+        <th>SAL</th>
         <th>Fechados</th>
         <th>CPL</th>
         <th>Receita</th>
@@ -83,13 +84,14 @@
         <td>{{ c.leads }}</td>
         <td>{{ c.mqls }}</td>
         <td>{{ c.sqls }}</td>
+        <td>{{ c.sals | default(0) }}</td>
         <td>{{ c.deals_closed }}</td>
         <td>R$ {{ "%.2f"|format(c.cpl) }}</td>
         <td>R$ {{ "%.0f"|format(c.revenue) }}</td>
         <td class="{% if c.roas >= 3 %}text-green{% endif %}">{{ "%.2f"|format(c.roas) }}x</td>
       </tr>
       {% else %}
-      <tr><td colspan="15" style="text-align:center;color:var(--muted);padding:3rem;">Nenhuma campanha — execute o pipeline para importar dados</td></tr>
+      <tr><td colspan="16" style="text-align:center;color:var(--muted);padding:3rem;">Nenhuma campanha — execute o pipeline para importar dados</td></tr>
       {% endfor %}
     </tbody>
     {% if campaigns %}
@@ -106,6 +108,7 @@
         <td id="tot-leads">—</td>
         <td id="tot-mqls">—</td>
         <td id="tot-sqls">—</td>
+        <td id="tot-sals">—</td>
         <td id="tot-deals">—</td>
         <td id="tot-cpl">—</td>
         <td id="tot-revenue">—</td>
@@ -210,11 +213,11 @@ function filterTable() {
 }
 
 function updateTotals() {
-  let spend=0, impressions=0, clicks=0, leads=0, mqls=0, sqls=0, deals=0, revenue=0;
+  let spend=0, impressions=0, clicks=0, leads=0, mqls=0, sqls=0, sals=0, deals=0, revenue=0;
   document.querySelectorAll('#campaigns-table tbody tr').forEach(row => {
     if (row.style.display === 'none') return;
     const cells = row.querySelectorAll('td');
-    if (cells.length < 15) return;
+    if (cells.length < 16) return;
     const parseR = s => parseFloat(s.replace(/[^0-9.,]/g,'').replace('.','').replace(',','.')) || 0;
     const parseN = s => parseInt(s.replace(/\./g,'').replace(/[^0-9]/g,'')) || 0;
     spend       += parseR(cells[3].textContent);
@@ -223,8 +226,9 @@ function updateTotals() {
     leads       += parseN(cells[8].textContent);
     mqls        += parseN(cells[9].textContent);
     sqls        += parseN(cells[10].textContent);
-    deals       += parseN(cells[11].textContent);
-    revenue     += parseR(cells[13].textContent);
+    sals        += parseN(cells[11].textContent);
+    deals       += parseN(cells[12].textContent);
+    revenue     += parseR(cells[14].textContent);
   });
   const tot = document.getElementById('totals-row');
   if (!tot) return;
@@ -240,6 +244,7 @@ function updateTotals() {
   document.getElementById('tot-leads').textContent       = leads;
   document.getElementById('tot-mqls').textContent        = mqls;
   document.getElementById('tot-sqls').textContent        = sqls;
+  document.getElementById('tot-sals').textContent        = sals;
   document.getElementById('tot-deals').textContent       = deals;
   document.getElementById('tot-cpl').textContent         = leads > 0 ? 'R$ ' + cpl.toFixed(2) : '—';
   document.getElementById('tot-revenue').textContent     = 'R$ ' + revenue.toFixed(0);

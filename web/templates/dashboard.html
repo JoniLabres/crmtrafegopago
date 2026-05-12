@@ -101,7 +101,7 @@
 <div style="margin:1.25rem 0 0.5rem;">
   <span style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);">Funil CRM — HubSpot</span>
 </div>
-<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);">
+<div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);">
   <div class="kpi-card">
     <div class="kpi-label">Leads</div>
     <div class="kpi-value">{{ kpis.leads }}</div>
@@ -116,6 +116,11 @@
     <div class="kpi-label">SQL</div>
     <div class="kpi-value {% if kpis.sqls | default(0) > 0 %}green{% endif %}">{{ kpis.sqls | default(0) }}</div>
     <div class="kpi-sub">Sales Qualified Lead{% if kpis.mqls | default(0) > 0 %} · {{ "%.0f"|format(kpis.sqls | default(0) / kpis.mqls * 100) }}% dos MQLs{% endif %}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">SAL</div>
+    <div class="kpi-value {% if kpis.sals | default(0) > 0 %}green{% endif %}">{{ kpis.sals | default(0) }}</div>
+    <div class="kpi-sub">Sales Accepted Lead{% if kpis.sqls | default(0) > 0 %} · {{ "%.0f"|format(kpis.sals | default(0) / kpis.sqls * 100) }}% dos SQLs{% endif %}</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-label">Negócios Fechados</div>
@@ -239,6 +244,7 @@
             <th>Leads</th>
             <th>MQL</th>
             <th>SQL</th>
+            <th>SAL</th>
             <th>Fechados</th>
             <th>CPL</th>
             <th>ROAS</th>
@@ -256,6 +262,7 @@
             <td>{{ r.leads }}</td>
             <td>{{ r.mqls | default(0) }}</td>
             <td>{{ r.sqls | default(0) }}</td>
+            <td>{{ r.sals | default(0) }}</td>
             <td>{{ r.deals_closed | default(0) }}</td>
             <td>R$ {{ "%.2f"|format(r.cpl) }}</td>
             <td class="{% if r.roas >= 3 %}text-green{% endif %}">{{ "%.2f"|format(r.roas) }}x</td>
@@ -313,6 +320,7 @@
           <th>Leads</th>
           <th>MQL</th>
           <th>SQL</th>
+          <th>SAL</th>
           <th>Fechados</th>
           <th>CPL</th>
           <th>ROAS</th>
@@ -333,6 +341,7 @@
           <td>{{ c.leads }}</td>
           <td>{{ c.mqls | default(0) }}</td>
           <td>{{ c.sqls | default(0) }}</td>
+          <td>{{ c.sals | default(0) }}</td>
           <td>{{ c.deals_closed | default(0) }}</td>
           <td>R$ {{ "%.2f"|format(c.cpl) }}</td>
           <td class="{% if c.roas >= 3 %}text-green{% endif %}">{{ "%.2f"|format(c.roas) }}x</td>
