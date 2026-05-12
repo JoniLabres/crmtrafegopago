@@ -158,11 +158,21 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
                 SELECT COALESCE(SUM(spend),0), COALESCE(SUM(leads),0),
                        COALESCE(SUM(revenue),0), COALESCE(COUNT(DISTINCT channel),0),
                        COALESCE(AVG(roas),0),
-                       COALESCE(SUM(impressions),0), COALESCE(SUM(clicks),0),
-                       COALESCE(SUM(mqls),0), COALESCE(SUM(sqls),0), COALESCE(SUM(deals_closed),0)
+                       COALESCE(SUM(impressions),0), COALESCE(SUM(clicks),0)
                 FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
             """, params_base)
-            spend, leads, revenue, channels, roas, impressions, clicks, mqls, sqls, deals_closed = cur.fetchone()
+            spend, leads, revenue, channels, roas, impressions, clicks = cur.fetchone()
+
+            # Funil CRM — colunas adicionadas via migration; fallback para 0 se não existirem
+            mqls = sqls = deals_closed = 0
+            try:
+                cur.execute(f"""
+                    SELECT COALESCE(SUM(mqls),0), COALESCE(SUM(sqls),0), COALESCE(SUM(deals_closed),0)
+                    FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
+                """, params_base)
+                mqls, sqls, deals_closed = cur.fetchone()
+            except Exception:
+                conn.rollback()
 
             cur.execute(f"""
                 SELECT channel,
@@ -181,15 +191,36 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
                        ::numeric,4), 0) AS cpc,
                        COALESCE(ROUND(
                            CASE WHEN SUM(impressions)>0 THEN SUM(clicks)::numeric/SUM(impressions) ELSE 0 END
-                       ::numeric,4), 0) AS ctr,
-                       COALESCE(SUM(mqls), 0) AS mqls,
-                       COALESCE(SUM(sqls), 0) AS sqls,
-                       COALESCE(SUM(deals_closed), 0) AS deals_closed
+                       ::numeric,4), 0) AS ctr
                 FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
                 GROUP BY channel ORDER BY spend DESC
             """, params_base)
             cols = [d[0] for d in cur.description]
             by_channel = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+            # Funil por canal — opcional
+            try:
+                cur.execute(f"""
+                    SELECT channel,
+                           COALESCE(SUM(mqls),0) AS mqls,
+                           COALESCE(SUM(sqls),0) AS sqls,
+                           COALESCE(SUM(deals_closed),0) AS deals_closed
+                    FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
+                    GROUP BY channel
+                """, params_base)
+                funnel_by_ch = {r[0]: {"mqls": int(r[1]), "sqls": int(r[2]), "deals_closed": int(r[3])}
+                                for r in cur.fetchall()}
+                for row in by_channel:
+                    f = funnel_by_ch.get(row["channel"], {})
+                    row["mqls"]         = f.get("mqls", 0)
+                    row["sqls"]         = f.get("sqls", 0)
+                    row["deals_closed"] = f.get("deals_closed", 0)
+            except Exception:
+                conn.rollback()
+                for row in by_channel:
+                    row.setdefault("mqls", 0)
+                    row.setdefault("sqls", 0)
+                    row.setdefault("deals_closed", 0)
 
             cur.execute(f"""
                 SELECT campaign_utm, MAX(campaign_name) AS campaign_name, channel, produto,
@@ -203,16 +234,32 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
                        ::numeric,2), 0) AS roas,
                        COALESCE(ROUND(
                            CASE WHEN SUM(leads)>0 THEN SUM(spend)/SUM(leads) ELSE 0 END
-                       ::numeric,2), 0) AS cpl,
-                       COALESCE(SUM(mqls), 0) AS mqls,
-                       COALESCE(SUM(sqls), 0) AS sqls,
-                       COALESCE(SUM(deals_closed), 0) AS deals_closed
+                       ::numeric,2), 0) AS cpl
                 FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
                 GROUP BY campaign_utm, channel, produto
                 ORDER BY spend DESC LIMIT 10
             """, params_base)
             cols = [d[0] for d in cur.description]
             top_campaigns = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+            # Funil por campanha — opcional
+            try:
+                cur.execute(f"""
+                    SELECT campaign_utm,
+                           COALESCE(SUM(mqls),0), COALESCE(SUM(sqls),0), COALESCE(SUM(deals_closed),0)
+                    FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
+                    GROUP BY campaign_utm
+                """, params_base)
+                funnel_by_utm = {r[0]: (int(r[1]), int(r[2]), int(r[3])) for r in cur.fetchall()}
+                for row in top_campaigns:
+                    f = funnel_by_utm.get(row["campaign_utm"], (0, 0, 0))
+                    row["mqls"], row["sqls"], row["deals_closed"] = f
+            except Exception:
+                conn.rollback()
+                for row in top_campaigns:
+                    row.setdefault("mqls", 0)
+                    row.setdefault("sqls", 0)
+                    row.setdefault("deals_closed", 0)
 
             # Alerts are not filtered by product (show all)
             cur.execute("""
