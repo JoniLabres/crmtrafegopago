@@ -427,13 +427,10 @@ async def campanhas(request: Request):
                            ::numeric,2), 0) AS cpl,
                            COALESCE(ROUND(
                                CASE WHEN SUM(clicks)>0 THEN SUM(spend)/SUM(clicks) ELSE 0 END
-                           ::numeric,4), 0) AS cpc,
+                           ::numeric,2), 0) AS cpc,
                            COALESCE(ROUND(
                                CASE WHEN SUM(impressions)>0 THEN SUM(clicks)::numeric/SUM(impressions) ELSE 0 END
-                           ::numeric,4), 0) AS ctr,
-                           COALESCE(SUM(mqls), 0)         AS mqls,
-                           COALESCE(SUM(sqls), 0)         AS sqls,
-                           COALESCE(SUM(deals_closed), 0) AS deals_closed
+                           ::numeric,4), 0) AS ctr
                     FROM campaigns_daily
                     WHERE date BETWEEN %s AND %s
                     GROUP BY campaign_utm, channel, produto
@@ -441,6 +438,27 @@ async def campanhas(request: Request):
                 """, (date_from_str, date_to_str))
                 cols = [d[0] for d in cur.description]
                 all_campaigns = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+                # Funil por campanha — colunas opcionais, fallback para 0
+                try:
+                    cur.execute("""
+                        SELECT campaign_utm,
+                               COALESCE(SUM(mqls),0), COALESCE(SUM(sqls),0), COALESCE(SUM(deals_closed),0)
+                        FROM campaigns_daily
+                        WHERE date BETWEEN %s AND %s
+                        GROUP BY campaign_utm
+                    """, (date_from_str, date_to_str))
+                    funnel_map = {r[0]: (int(r[1]), int(r[2]), int(r[3])) for r in cur.fetchall()}
+                    for c in all_campaigns:
+                        f = funnel_map.get(c["campaign_utm"], (0, 0, 0))
+                        c["mqls"], c["sqls"], c["deals_closed"] = f
+                except Exception:
+                    conn.rollback()
+                    for c in all_campaigns:
+                        c.setdefault("mqls", 0)
+                        c.setdefault("sqls", 0)
+                        c.setdefault("deals_closed", 0)
+
             conn.close()
         except Exception as e:
             logger.warning("campanhas DB query: %s", e)
