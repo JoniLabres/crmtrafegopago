@@ -158,10 +158,11 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
                 SELECT COALESCE(SUM(spend),0), COALESCE(SUM(leads),0),
                        COALESCE(SUM(revenue),0), COALESCE(COUNT(DISTINCT channel),0),
                        COALESCE(AVG(roas),0),
-                       COALESCE(SUM(impressions),0), COALESCE(SUM(clicks),0)
+                       COALESCE(SUM(impressions),0), COALESCE(SUM(clicks),0),
+                       COALESCE(SUM(mqls),0), COALESCE(SUM(sqls),0), COALESCE(SUM(deals_closed),0)
                 FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
             """, params_base)
-            spend, leads, revenue, channels, roas, impressions, clicks = cur.fetchone()
+            spend, leads, revenue, channels, roas, impressions, clicks, mqls, sqls, deals_closed = cur.fetchone()
 
             cur.execute(f"""
                 SELECT channel,
@@ -180,7 +181,10 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
                        ::numeric,4), 0) AS cpc,
                        COALESCE(ROUND(
                            CASE WHEN SUM(impressions)>0 THEN SUM(clicks)::numeric/SUM(impressions) ELSE 0 END
-                       ::numeric,4), 0) AS ctr
+                       ::numeric,4), 0) AS ctr,
+                       COALESCE(SUM(mqls), 0) AS mqls,
+                       COALESCE(SUM(sqls), 0) AS sqls,
+                       COALESCE(SUM(deals_closed), 0) AS deals_closed
                 FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
                 GROUP BY channel ORDER BY spend DESC
             """, params_base)
@@ -199,7 +203,10 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
                        ::numeric,2), 0) AS roas,
                        COALESCE(ROUND(
                            CASE WHEN SUM(leads)>0 THEN SUM(spend)/SUM(leads) ELSE 0 END
-                       ::numeric,2), 0) AS cpl
+                       ::numeric,2), 0) AS cpl,
+                       COALESCE(SUM(mqls), 0) AS mqls,
+                       COALESCE(SUM(sqls), 0) AS sqls,
+                       COALESCE(SUM(deals_closed), 0) AS deals_closed
                 FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
                 GROUP BY campaign_utm, channel, produto
                 ORDER BY spend DESC LIMIT 10
@@ -224,9 +231,10 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
         return {
             "kpis": {"spend": float(spend), "leads": int(leads), "revenue": float(revenue),
                      "channels": int(channels), "roas": float(roas), "cpl": cpl,
-                     "mer": mer, "deals": 0, "roas_meta": 4.0,
+                     "mer": mer, "deals": int(deals_closed), "roas_meta": 4.0,
                      "impressions": int(impressions), "clicks": int(clicks),
-                     "ctr": ctr_geral, "cpc": cpc_geral},
+                     "ctr": ctr_geral, "cpc": cpc_geral,
+                     "mqls": int(mqls), "sqls": int(sqls), "deals_closed": int(deals_closed)},
             "by_channel": by_channel, "top_campaigns": top_campaigns, "alerts": alerts,
         }
     except Exception as e:
@@ -375,7 +383,10 @@ async def campanhas(request: Request):
                            ::numeric,4), 0) AS cpc,
                            COALESCE(ROUND(
                                CASE WHEN SUM(impressions)>0 THEN SUM(clicks)::numeric/SUM(impressions) ELSE 0 END
-                           ::numeric,4), 0) AS ctr
+                           ::numeric,4), 0) AS ctr,
+                           COALESCE(SUM(mqls), 0)         AS mqls,
+                           COALESCE(SUM(sqls), 0)         AS sqls,
+                           COALESCE(SUM(deals_closed), 0) AS deals_closed
                     FROM campaigns_daily
                     WHERE date BETWEEN %s AND %s
                     GROUP BY campaign_utm, channel, produto
@@ -1617,6 +1628,13 @@ async def db_setup():
                             UNIQUE (date, channel, campaign_utm, produto);
                     END IF;
                 END $$;
+            """)
+            # Migration: adiciona colunas MQL/SQL/deals_closed se não existirem
+            cur.execute("""
+                ALTER TABLE campaigns_daily
+                    ADD COLUMN IF NOT EXISTS mqls         INTEGER DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS sqls         INTEGER DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS deals_closed INTEGER DEFAULT 0;
             """)
         conn.commit()
         conn.close()

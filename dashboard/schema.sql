@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS campaigns_daily (
     cpl             NUMERIC(10, 2) DEFAULT 0,
     cpc             NUMERIC(10, 4) DEFAULT 0,
     ctr             NUMERIC(8, 4) DEFAULT 0,
+    mqls            INTEGER DEFAULT 0,
+    sqls            INTEGER DEFAULT 0,
+    deals_closed    INTEGER DEFAULT 0,
     created_at      TIMESTAMP DEFAULT NOW(),
     updated_at      TIMESTAMP DEFAULT NOW(),
     UNIQUE (date, channel, campaign_utm, produto)

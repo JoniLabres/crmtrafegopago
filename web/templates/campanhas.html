@@ -56,6 +56,9 @@
         <th>CTR</th>
         <th>CPC</th>
         <th>Leads</th>
+        <th>MQL</th>
+        <th>SQL</th>
+        <th>Fechados</th>
         <th>CPL</th>
         <th>Receita</th>
         <th>ROAS</th>
@@ -78,12 +81,15 @@
         <td>{{ "%.2f"|format(c.ctr * 100) }}%</td>
         <td>R$ {{ "%.2f"|format(c.cpc) }}</td>
         <td>{{ c.leads }}</td>
+        <td>{{ c.mqls }}</td>
+        <td>{{ c.sqls }}</td>
+        <td>{{ c.deals_closed }}</td>
         <td>R$ {{ "%.2f"|format(c.cpl) }}</td>
         <td>R$ {{ "%.0f"|format(c.revenue) }}</td>
         <td class="{% if c.roas >= 3 %}text-green{% endif %}">{{ "%.2f"|format(c.roas) }}x</td>
       </tr>
       {% else %}
-      <tr><td colspan="12" style="text-align:center;color:var(--muted);padding:3rem;">Nenhuma campanha — execute o pipeline para importar dados</td></tr>
+      <tr><td colspan="15" style="text-align:center;color:var(--muted);padding:3rem;">Nenhuma campanha — execute o pipeline para importar dados</td></tr>
       {% endfor %}
     </tbody>
     {% if campaigns %}
@@ -98,6 +104,9 @@
         <td id="tot-ctr">—</td>
         <td id="tot-cpc">—</td>
         <td id="tot-leads">—</td>
+        <td id="tot-mqls">—</td>
+        <td id="tot-sqls">—</td>
+        <td id="tot-deals">—</td>
         <td id="tot-cpl">—</td>
         <td id="tot-revenue">—</td>
         <td id="tot-roas">—</td>
@@ -201,31 +210,37 @@ function filterTable() {
 }
 
 function updateTotals() {
-  let spend=0, impressions=0, clicks=0, leads=0, revenue=0;
+  let spend=0, impressions=0, clicks=0, leads=0, mqls=0, sqls=0, deals=0, revenue=0;
   document.querySelectorAll('#campaigns-table tbody tr').forEach(row => {
     if (row.style.display === 'none') return;
     const cells = row.querySelectorAll('td');
-    if (cells.length < 12) return;
+    if (cells.length < 15) return;
     const parseR = s => parseFloat(s.replace(/[^0-9.,]/g,'').replace('.','').replace(',','.')) || 0;
     const parseN = s => parseInt(s.replace(/\./g,'').replace(/[^0-9]/g,'')) || 0;
     spend       += parseR(cells[3].textContent);
     impressions += parseN(cells[4].textContent);
     clicks      += parseN(cells[5].textContent);
     leads       += parseN(cells[8].textContent);
-    revenue     += parseR(cells[10].textContent);
+    mqls        += parseN(cells[9].textContent);
+    sqls        += parseN(cells[10].textContent);
+    deals       += parseN(cells[11].textContent);
+    revenue     += parseR(cells[13].textContent);
   });
   const tot = document.getElementById('totals-row');
   if (!tot) return;
   const ctr  = impressions > 0 ? clicks / impressions * 100 : 0;
-  const cpc  = clicks  > 0 ? spend / clicks   : 0;
-  const cpl  = leads   > 0 ? spend / leads    : 0;
-  const roas = spend   > 0 ? revenue / spend  : 0;
+  const cpc  = clicks  > 0 ? spend / clicks  : 0;
+  const cpl  = leads   > 0 ? spend / leads   : 0;
+  const roas = spend   > 0 ? revenue / spend : 0;
   document.getElementById('tot-spend').textContent       = 'R$ ' + spend.toFixed(0);
   document.getElementById('tot-impressions').textContent = impressions.toLocaleString('pt-BR');
   document.getElementById('tot-clicks').textContent      = clicks.toLocaleString('pt-BR');
   document.getElementById('tot-ctr').textContent         = ctr.toFixed(2) + '%';
   document.getElementById('tot-cpc').textContent         = clicks > 0 ? 'R$ ' + cpc.toFixed(2) : '—';
   document.getElementById('tot-leads').textContent       = leads;
+  document.getElementById('tot-mqls').textContent        = mqls;
+  document.getElementById('tot-sqls').textContent        = sqls;
+  document.getElementById('tot-deals').textContent       = deals;
   document.getElementById('tot-cpl').textContent         = leads > 0 ? 'R$ ' + cpl.toFixed(2) : '—';
   document.getElementById('tot-revenue').textContent     = 'R$ ' + revenue.toFixed(0);
   document.getElementById('tot-roas').textContent        = roas.toFixed(2) + 'x';

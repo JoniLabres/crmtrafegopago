@@ -79,21 +79,48 @@
     <div class="kpi-sub">CPL médio R$ {{ "%.2f"|format(kpis.cpl) }}</div>
   </div>
   <div class="kpi-card">
-    <div class="kpi-label">Receita Atribuída</div>
-    <div class="kpi-value">R$ {{ "%.0f"|format(kpis.revenue) }}</div>
-    <div class="kpi-sub">{{ kpis.deals }} negócios fechados</div>
-  </div>
-  <div class="kpi-card">
     <div class="kpi-label">ROAS Médio</div>
     <div class="kpi-value {% if kpis.roas >= 3 %}green{% endif %}">{{ "%.2f"|format(kpis.roas) }}x</div>
     <div class="kpi-sub">por canal · atribuído</div>
   </div>
-  <div class="kpi-card" title="MER = Receita Total / Investimento Total em todos os canais. Diferente do ROAS (atribuído por canal), o MER usa a receita real do negócio — sem viés de atribuição.">
+  <div class="kpi-card" title="MER = Receita Total / Investimento Total em todos os canais.">
     <div class="kpi-label">MER <span style="font-size:0.65rem;color:var(--muted);font-weight:400;">(blended)</span></div>
     <div class="kpi-value {% if kpis.mer >= 3 %}green{% elif kpis.mer > 0 and kpis.mer < 2 %}text-danger{% endif %}">
       {% if kpis.mer > 0 %}{{ "%.2f"|format(kpis.mer) }}x{% else %}—{% endif %}
     </div>
     <div class="kpi-sub">receita ÷ investimento total</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Receita Atribuída</div>
+    <div class="kpi-value">R$ {{ "%.0f"|format(kpis.revenue) }}</div>
+    <div class="kpi-sub">{{ kpis.deals_closed }} negócios fechados</div>
+  </div>
+</div>
+
+<!-- KPIs de Funil CRM -->
+<div style="margin:1.25rem 0 0.5rem;">
+  <span style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);">Funil CRM — HubSpot</span>
+</div>
+<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);">
+  <div class="kpi-card">
+    <div class="kpi-label">Leads</div>
+    <div class="kpi-value">{{ kpis.leads }}</div>
+    <div class="kpi-sub">CPL R$ {{ "%.2f"|format(kpis.cpl) }}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">MQL</div>
+    <div class="kpi-value {% if kpis.mqls > 0 %}green{% endif %}">{{ kpis.mqls }}</div>
+    <div class="kpi-sub">Marketing Qualified Lead{% if kpis.leads > 0 %} · {{ "%.0f"|format(kpis.mqls / kpis.leads * 100) }}% dos leads{% endif %}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">SQL</div>
+    <div class="kpi-value {% if kpis.sqls > 0 %}green{% endif %}">{{ kpis.sqls }}</div>
+    <div class="kpi-sub">Sales Qualified Lead{% if kpis.mqls > 0 %} · {{ "%.0f"|format(kpis.sqls / kpis.mqls * 100) }}% dos MQLs{% endif %}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Negócios Fechados</div>
+    <div class="kpi-value {% if kpis.deals_closed > 0 %}green{% endif %}">{{ kpis.deals_closed }}</div>
+    <div class="kpi-sub">Receita R$ {{ "%.0f"|format(kpis.revenue) }}{% if kpis.sqls > 0 %} · {{ "%.0f"|format(kpis.deals_closed / kpis.sqls * 100) }}% dos SQLs{% endif %}</div>
   </div>
 </div>
 
@@ -210,6 +237,9 @@
             <th>CTR</th>
             <th>CPC</th>
             <th>Leads</th>
+            <th>MQL</th>
+            <th>SQL</th>
+            <th>Fechados</th>
             <th>CPL</th>
             <th>ROAS</th>
           </tr>
@@ -224,11 +254,14 @@
             <td>{{ "%.2f"|format(r.ctr * 100) }}%</td>
             <td>R$ {{ "%.2f"|format(r.cpc) }}</td>
             <td>{{ r.leads }}</td>
+            <td>{{ r.mqls }}</td>
+            <td>{{ r.sqls }}</td>
+            <td>{{ r.deals_closed }}</td>
             <td>R$ {{ "%.2f"|format(r.cpl) }}</td>
             <td class="{% if r.roas >= 3 %}text-green{% endif %}">{{ "%.2f"|format(r.roas) }}x</td>
           </tr>
           {% else %}
-          <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:2rem;">Sem dados — configure o pipeline e rode o health check</td></tr>
+          <tr><td colspan="12" style="text-align:center;color:var(--muted);padding:2rem;">Sem dados — configure o pipeline e rode o health check</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -278,6 +311,9 @@
           <th>Cliques</th>
           <th>CTR</th>
           <th>Leads</th>
+          <th>MQL</th>
+          <th>SQL</th>
+          <th>Fechados</th>
           <th>CPL</th>
           <th>ROAS</th>
         </tr>
@@ -295,11 +331,14 @@
           <td>{{ "{:,.0f}".format(c.clicks).replace(",",".") }}</td>
           <td>{{ "%.2f"|format((c.clicks / c.impressions * 100) if c.impressions else 0) }}%</td>
           <td>{{ c.leads }}</td>
+          <td>{{ c.mqls }}</td>
+          <td>{{ c.sqls }}</td>
+          <td>{{ c.deals_closed }}</td>
           <td>R$ {{ "%.2f"|format(c.cpl) }}</td>
           <td class="{% if c.roas >= 3 %}text-green{% endif %}">{{ "%.2f"|format(c.roas) }}x</td>
         </tr>
         {% else %}
-        <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:2rem;">Nenhuma campanha no período</td></tr>
+        <tr><td colspan="13" style="text-align:center;color:var(--muted);padding:2rem;">Nenhuma campanha no período</td></tr>
         {% endfor %}
       </tbody>
     </table>

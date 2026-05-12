@@ -59,6 +59,51 @@ class HubSpotPuller:
         logger.info("Contatos puxados: %d", len(df))
         return df
 
+    def _search(self, object_type: str, filters: list, properties: list) -> list:
+        """POST paginado na search API do HubSpot."""
+        results = []
+        after = None
+        while True:
+            body = {
+                "properties": properties,
+                "filterGroups": [{"filters": filters}],
+                "limit": 100,
+            }
+            if after:
+                body["after"] = after
+            data = self.client.post(f"/crm/v3/objects/{object_type}/search", json=body)
+            results.extend(data.get("results", []))
+            after = data.get("paging", {}).get("next", {}).get("after")
+            if not after:
+                break
+        return results
+
+    def fetch_funnel_metrics(self, date_from: date, date_to: date) -> pd.DataFrame:
+        """Retorna MQL e SQL por utm_campaign no período (via lifecyclestage)."""
+        utm_data: dict = {}
+
+        for lifecycle, key in [
+            ("marketingqualifiedlead", "mqls"),
+            ("salesqualifiedlead",     "sqls"),
+        ]:
+            try:
+                contacts = self._search("contacts", [
+                    {"propertyName": "lifecyclestage", "operator": "EQ",      "value": lifecycle},
+                    {"propertyName": "createdate",     "operator": "BETWEEN",
+                     "value": str(date_from), "highValue": str(date_to)},
+                ], ["utm_campaign", "lifecyclestage"])
+                for c in contacts:
+                    utm = (c.get("properties", {}).get("utm_campaign") or "").strip()
+                    if utm:
+                        utm_data.setdefault(utm, {"mqls": 0, "sqls": 0})
+                        utm_data[utm][key] += 1
+            except Exception as e:
+                logger.warning("fetch_funnel_metrics [%s]: %s", lifecycle, e)
+
+        if not utm_data:
+            return pd.DataFrame(columns=["campaign_utm", "mqls", "sqls"])
+        return pd.DataFrame([{"campaign_utm": k, **v} for k, v in utm_data.items()])
+
     def fetch_deals(self, date_from: date, date_to: date) -> pd.DataFrame:
         logger.info("Puxando negócios fechados de %s a %s", date_from, date_to)
         params = {

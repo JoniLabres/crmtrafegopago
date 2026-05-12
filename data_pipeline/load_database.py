@@ -37,7 +37,8 @@ ACCOUNTS_PATH = ROOT / "config" / "accounts.json"
 UPSERT_SQL = """
 INSERT INTO campaigns_daily
     (date, channel, campaign_utm, campaign_name, produto,
-     spend, impressions, clicks, leads, revenue, roas, cpl, cpc, ctr, updated_at)
+     spend, impressions, clicks, leads, revenue, roas, cpl, cpc, ctr,
+     mqls, sqls, deals_closed, updated_at)
 VALUES %s
 ON CONFLICT (date, channel, campaign_utm, produto) DO UPDATE SET
     campaign_name = EXCLUDED.campaign_name,
@@ -50,6 +51,9 @@ ON CONFLICT (date, channel, campaign_utm, produto) DO UPDATE SET
     cpl           = EXCLUDED.cpl,
     cpc           = EXCLUDED.cpc,
     ctr           = EXCLUDED.ctr,
+    mqls          = EXCLUDED.mqls,
+    sqls          = EXCLUDED.sqls,
+    deals_closed  = EXCLUDED.deals_closed,
     updated_at    = NOW();
 """
 
@@ -109,7 +113,16 @@ def _pull_hubspot_deals(date_from: date, date_to: date) -> pd.DataFrame:
         puller = HubSpotPuller()
         return puller.fetch_deals(date_from, date_to)
     except Exception as e:
-        logger.warning("HubSpot indisponível: %s", e)
+        logger.warning("HubSpot deals indisponível: %s", e)
+        return pd.DataFrame()
+
+
+def _pull_hubspot_funnel(date_from: date, date_to: date) -> pd.DataFrame:
+    try:
+        puller = HubSpotPuller()
+        return puller.fetch_funnel_metrics(date_from, date_to)
+    except Exception as e:
+        logger.warning("HubSpot funnel indisponível: %s", e)
         return pd.DataFrame()
 
 
@@ -124,8 +137,9 @@ def run_pipeline(date_from: date = None, date_to: date = None) -> int:
         logger.warning("Nenhum produto em accounts.json — configure em Conexões.")
         return 0
 
-    # HubSpot deals são compartilhados entre produtos (join via utm_campaign)
-    deals_df = _pull_hubspot_deals(date_from, date_to)
+    # HubSpot: deals e funnel (MQL/SQL) compartilhados entre produtos
+    deals_df  = _pull_hubspot_deals(date_from, date_to)
+    funnel_df = _pull_hubspot_funnel(date_from, date_to)
 
     all_rows = []
     for produto_cfg in accounts:
@@ -138,7 +152,7 @@ def run_pipeline(date_from: date = None, date_to: date = None) -> int:
             logger.info("[%s] Sem dados de Ads no período.", nome)
             continue
 
-        consolidated = join_campaign_data(ads_df, deals_df)
+        consolidated = join_campaign_data(ads_df, deals_df, funnel_df)
         consolidated["produto"] = nome  # garante tag do produto
 
         for _, r in consolidated.iterrows():
@@ -163,6 +177,9 @@ def run_pipeline(date_from: date = None, date_to: date = None) -> int:
                 float(r.get("cpl", 0)),
                 float(r.get("cpc", 0)),
                 float(r.get("ctr", 0)),
+                int(r.get("mqls", 0)),
+                int(r.get("sqls", 0)),
+                int(r.get("deals_closed", 0)),
             ))
 
     if not all_rows:
@@ -171,13 +188,15 @@ def run_pipeline(date_from: date = None, date_to: date = None) -> int:
 
     # Deduplicar por (date, channel, campaign_utm, produto) somando métricas
     cols = ["date","channel","campaign_utm","campaign_name","produto",
-            "spend","impressions","clicks","leads","revenue","roas","cpl","cpc","ctr"]
+            "spend","impressions","clicks","leads","revenue","roas","cpl","cpc","ctr",
+            "mqls","sqls","deals_closed"]
     dedup_df = pd.DataFrame(all_rows, columns=cols)
     key = ["date","channel","campaign_utm","produto"]
     agg = {
         "campaign_name": "first",
         "spend": "sum", "impressions": "sum", "clicks": "sum",
         "leads": "sum", "revenue": "sum",
+        "mqls": "sum", "sqls": "sum", "deals_closed": "sum",
     }
     dedup_df = dedup_df.groupby(key, as_index=False).agg(agg)
     dedup_df["roas"] = dedup_df.apply(
@@ -188,6 +207,7 @@ def run_pipeline(date_from: date = None, date_to: date = None) -> int:
         lambda r: round(r["spend"]/r["clicks"],4)  if r["clicks"]>0 else 0.0, axis=1)
     dedup_df["ctr"]  = dedup_df.apply(
         lambda r: round(r["clicks"]/r["impressions"],4) if r["impressions"]>0 else 0.0, axis=1)
+    # Remove updated_at do UPSERT_SQL pois não está em cols
     all_rows = [tuple(row) for row in dedup_df[cols].itertuples(index=False)]
     logger.info("Rows após deduplicação: %d", len(all_rows))
 
