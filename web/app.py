@@ -1389,6 +1389,39 @@ async def debug_dashboard(days: int = 30):
     }
 
 
+@app.get("/api/debug/db")
+async def debug_db():
+    """Estado do banco: linhas por canal/produto e últimas datas."""
+    _apply_env_overrides()
+    try:
+        import psycopg2
+        conn = psycopg2.connect(get_db_url())
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT channel, produto,
+                       COUNT(*) AS rows,
+                       MIN(date) AS date_min,
+                       MAX(date) AS date_max,
+                       ROUND(SUM(spend)::numeric,0) AS total_spend,
+                       SUM(leads) AS total_leads
+                FROM campaigns_daily
+                GROUP BY channel, produto
+                ORDER BY total_spend DESC
+            """)
+            cols = [d[0] for d in cur.description]
+            rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+            cur.execute("SELECT COUNT(*) FROM campaigns_daily")
+            total = cur.fetchone()[0]
+        conn.close()
+        return {
+            "total_rows": total,
+            "by_channel_produto": rows,
+            "empty": total == 0,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @app.get("/api/debug/pull")
 async def debug_pull(produto: str = "ixc-provedor", channel: str = "meta",
                      date_from: str = None, date_to: str = None):
