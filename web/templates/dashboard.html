@@ -93,7 +93,7 @@
   <div class="kpi-card">
     <div class="kpi-label">Receita Atribuída</div>
     <div class="kpi-value">R$ {{ "%.0f"|format(kpis.revenue) }}</div>
-    <div class="kpi-sub">{{ kpis.deals_closed }} negócios fechados</div>
+    <div class="kpi-sub">{{ kpis.deals_closed | default(0) }} negócios fechados</div>
   </div>
 </div>
 
@@ -109,18 +109,18 @@
   </div>
   <div class="kpi-card">
     <div class="kpi-label">MQL</div>
-    <div class="kpi-value {% if kpis.mqls > 0 %}green{% endif %}">{{ kpis.mqls }}</div>
-    <div class="kpi-sub">Marketing Qualified Lead{% if kpis.leads > 0 %} · {{ "%.0f"|format(kpis.mqls / kpis.leads * 100) }}% dos leads{% endif %}</div>
+    <div class="kpi-value {% if kpis.mqls | default(0) > 0 %}green{% endif %}">{{ kpis.mqls | default(0) }}</div>
+    <div class="kpi-sub">Marketing Qualified Lead{% if kpis.leads > 0 and kpis.mqls | default(0) > 0 %} · {{ "%.0f"|format(kpis.mqls / kpis.leads * 100) }}% dos leads{% endif %}</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-label">SQL</div>
-    <div class="kpi-value {% if kpis.sqls > 0 %}green{% endif %}">{{ kpis.sqls }}</div>
-    <div class="kpi-sub">Sales Qualified Lead{% if kpis.mqls > 0 %} · {{ "%.0f"|format(kpis.sqls / kpis.mqls * 100) }}% dos MQLs{% endif %}</div>
+    <div class="kpi-value {% if kpis.sqls | default(0) > 0 %}green{% endif %}">{{ kpis.sqls | default(0) }}</div>
+    <div class="kpi-sub">Sales Qualified Lead{% if kpis.mqls | default(0) > 0 %} · {{ "%.0f"|format(kpis.sqls | default(0) / kpis.mqls * 100) }}% dos MQLs{% endif %}</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-label">Negócios Fechados</div>
-    <div class="kpi-value {% if kpis.deals_closed > 0 %}green{% endif %}">{{ kpis.deals_closed }}</div>
-    <div class="kpi-sub">Receita R$ {{ "%.0f"|format(kpis.revenue) }}{% if kpis.sqls > 0 %} · {{ "%.0f"|format(kpis.deals_closed / kpis.sqls * 100) }}% dos SQLs{% endif %}</div>
+    <div class="kpi-value {% if kpis.deals_closed | default(0) > 0 %}green{% endif %}">{{ kpis.deals_closed | default(0) }}</div>
+    <div class="kpi-sub">Receita R$ {{ "%.0f"|format(kpis.revenue) }}{% if kpis.sqls | default(0) > 0 %} · {{ "%.0f"|format(kpis.deals_closed | default(0) / kpis.sqls * 100) }}% dos SQLs{% endif %}</div>
   </div>
 </div>
 
@@ -254,9 +254,9 @@
             <td>{{ "%.2f"|format(r.ctr * 100) }}%</td>
             <td>R$ {{ "%.2f"|format(r.cpc) }}</td>
             <td>{{ r.leads }}</td>
-            <td>{{ r.mqls }}</td>
-            <td>{{ r.sqls }}</td>
-            <td>{{ r.deals_closed }}</td>
+            <td>{{ r.mqls | default(0) }}</td>
+            <td>{{ r.sqls | default(0) }}</td>
+            <td>{{ r.deals_closed | default(0) }}</td>
             <td>R$ {{ "%.2f"|format(r.cpl) }}</td>
             <td class="{% if r.roas >= 3 %}text-green{% endif %}">{{ "%.2f"|format(r.roas) }}x</td>
           </tr>
@@ -331,9 +331,9 @@
           <td>{{ "{:,.0f}".format(c.clicks).replace(",",".") }}</td>
           <td>{{ "%.2f"|format((c.clicks / c.impressions * 100) if c.impressions else 0) }}%</td>
           <td>{{ c.leads }}</td>
-          <td>{{ c.mqls }}</td>
-          <td>{{ c.sqls }}</td>
-          <td>{{ c.deals_closed }}</td>
+          <td>{{ c.mqls | default(0) }}</td>
+          <td>{{ c.sqls | default(0) }}</td>
+          <td>{{ c.deals_closed | default(0) }}</td>
           <td>R$ {{ "%.2f"|format(c.cpl) }}</td>
           <td class="{% if c.roas >= 3 %}text-green{% endif %}">{{ "%.2f"|format(c.roas) }}x</td>
         </tr>

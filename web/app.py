@@ -287,7 +287,9 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
     except Exception as e:
         logger.warning("DB indisponível: %s", e)
         return {
-            "kpis": {"spend":0,"leads":0,"revenue":0,"channels":0,"roas":0,"cpl":0,"mer":0,"deals":0,"roas_meta":4.0},
+            "kpis": {"spend":0,"leads":0,"revenue":0,"channels":0,"roas":0,"cpl":0,"mer":0,"deals":0,
+                     "roas_meta":4.0,"impressions":0,"clicks":0,"ctr":0,"cpc":0,
+                     "mqls":0,"sqls":0,"deals_closed":0},
             "by_channel": [], "top_campaigns": [], "alerts": [],
         }
 
