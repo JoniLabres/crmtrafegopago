@@ -526,21 +526,21 @@ def deploy_all_tags(
         "type": "html",
         "parameter": _html_tag(_UTM_ENGINE_HTML),
         "firingTriggerId": [_ALL_PAGES],
-        "tagFiringOption": "oncePerPage",
+        "tagFiringOption": "oncePerLoad",
     })
     _upsert_tag({
         "name": "IXC - Form UTM Injector",
         "type": "html",
         "parameter": _html_tag(_FORM_INJECTOR_HTML),
         "firingTriggerId": [_ALL_PAGES],
-        "tagFiringOption": "oncePerPage",
+        "tagFiringOption": "oncePerLoad",
     })
     _upsert_tag({
         "name": "IXC - Engagement Tracking",
         "type": "html",
         "parameter": _html_tag(_ENGAGEMENT_HTML),
         "firingTriggerId": [_ALL_PAGES],
-        "tagFiringOption": "oncePerPage",
+        "tagFiringOption": "oncePerLoad",
     })
 
     # ── 4. GA4 ───────────────────────────────────────────────────────────────
