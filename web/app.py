@@ -2387,8 +2387,9 @@ async def gtm_debug_creds():
     _apply_env_overrides()
     def mask(v: str) -> str:
         if not v:
-            return "(vazio)"
-        return v[:6] + "..." + v[-4:] if len(v) > 10 else "***"
+            return "(vazio — 0 chars)"
+        preview = (v[:6] + "..." + v[-4:]) if len(v) > 10 else v[:3] + "***"
+        return f"{preview} ({len(v)} chars)"
     return {
         "GTM_CLIENT_ID":            mask(os.getenv("GTM_CLIENT_ID", "")),
         "GTM_CLIENT_SECRET":        mask(os.getenv("GTM_CLIENT_SECRET", "")),
