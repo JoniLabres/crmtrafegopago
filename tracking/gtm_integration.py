@@ -120,19 +120,6 @@ def _container_path() -> str:
     )
 
 
-def _resolve_workspace() -> str:
-    """Creates a fresh workspace for each deploy to avoid 'already submitted' conflicts."""
-    import datetime
-    service   = _get_service()
-    container = _container_path()
-    ts = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M")
-    new_ws = service.accounts().containers().workspaces().create(
-        parent=container,
-        body={"name": f"IXCTraffic-{ts}", "description": "Deploy automático via IXCTraffic"},
-    ).execute()
-    wid = new_ws["workspaceId"]
-    logger.info("Workspace GTM criado: %s", wid)
-    return wid
 
 
 def list_workspace(workspace_id: str = "1") -> dict:
@@ -435,19 +422,24 @@ def deploy_all_tags(
 ) -> dict:
     """Creates/updates all tracking tags, triggers and variables in GTM via API.
     Returns a log of every action taken."""
-    service = _get_service()
+    import datetime
+    service   = _get_service()
     container = _container_path()
-    workspace_id = _resolve_workspace()
+
+    # Always create a brand-new workspace to avoid 'already submitted' conflicts
+    ts     = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    new_ws = service.accounts().containers().workspaces().create(
+        parent=container,
+        body={"name": f"IXC-{ts}", "description": "Deploy via IXCTraffic"},
+    ).execute()
+    workspace_id = str(new_ws["workspaceId"])
     ws = f"{container}/workspaces/{workspace_id}"
 
     log: list[str] = []
-    log.append(f"  ℹ Usando workspace {workspace_id}")
+    log.append(f"  ℹ Workspace criado: {workspace_id}")
 
-    # ── Load existing items (deduplication) ──────────────────────────────────
-    try:
-        existing = list_workspace(workspace_id)
-    except Exception:
-        existing = {"tags": [], "triggers": [], "variables": []}
+    # New workspace is always empty — skip list call
+    existing    = {"tags": [], "triggers": [], "variables": []}
     ex_tags     = {t["name"]: t for t in existing["tags"]}
     ex_triggers = {t["name"]: t for t in existing["triggers"]}
     ex_vars     = {v["name"]: v for v in existing["variables"]}
