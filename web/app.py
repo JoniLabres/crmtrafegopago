@@ -2400,6 +2400,20 @@ async def gtm_debug_creds():
     }
 
 
+@app.get("/api/gtm/containers")
+async def gtm_containers():
+    _apply_env_overrides()
+    try:
+        sys.path.insert(0, str(ROOT / "tracking"))
+        from gtm_integration import list_containers
+        return {"containers": list_containers()}
+    except EnvironmentError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        logger.error("GTM containers error: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.get("/api/gtm/verify")
 async def gtm_verify():
     _apply_env_overrides()
@@ -2436,6 +2450,12 @@ async def rastreamento_deploy(request: Request):
     thankyou_url = data.get("thankyou_url", "").strip()
     workspace_id = data.get("workspace_id", "1")
     publish      = data.get("publish", True)
+    public_id    = data.get("public_id", "").strip()
+
+    # Override active container if user selected one in the UI
+    if public_id:
+        os.environ["GTM_PUBLIC_ID"] = public_id
+        os.environ.pop("GTM_CONTAINER_ID", None)  # force re-resolve numeric ID
 
     env = _get_env()
     ga4_id       = env.get("GA4_MEASUREMENT_ID", "")

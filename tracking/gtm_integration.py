@@ -137,6 +137,23 @@ def list_workspace(workspace_id: str = "1") -> dict:
     }
 
 
+def list_containers() -> list:
+    """Returns all containers in the configured GTM account."""
+    service    = _get_service()
+    account_id = os.getenv("GTM_ACCOUNT_ID", "")
+    if not account_id:
+        raise EnvironmentError("GTM_ACCOUNT_ID não configurado.")
+    resp = service.accounts().containers().list(parent=f"accounts/{account_id}").execute()
+    return [
+        {
+            "containerId": c.get("containerId"),
+            "publicId":    c.get("publicId"),
+            "name":        c.get("name", c.get("publicId", "")),
+        }
+        for c in resp.get("container", [])
+    ]
+
+
 def verify_setup(workspace_id: str = "1") -> dict:
     """
     Checks that all required UTM variables and conversion tags are present.

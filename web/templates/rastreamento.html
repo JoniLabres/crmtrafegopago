@@ -46,6 +46,25 @@
 .form-card h3 { font-size: 1rem; font-weight: 700; margin: 0 0 0.25rem; }
 .form-card .desc { font-size: 0.82rem; color: var(--muted); margin: 0 0 1.25rem; line-height: 1.5; }
 
+/* ── Container selector ───────────────────────────────────────────────── */
+.container-select-wrap { margin-bottom: 1.25rem; }
+.container-select-wrap label {
+  font-size: 0.78rem; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 0.3rem;
+}
+.container-select {
+  width: 100%; background: rgba(0,0,0,.25); border: 1px solid var(--border);
+  border-radius: 8px; padding: 0.65rem 1rem; font-size: 0.9rem; color: var(--text);
+  font-family: inherit; outline: none; cursor: pointer; transition: border-color .15s;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 1rem center;
+  padding-right: 2.5rem;
+}
+.container-select:focus { border-color: rgba(163,255,0,.5); }
+.container-select option { background: #1a1a1a; }
+.container-loading { font-size: 0.78rem; color: var(--muted); margin-top: 0.3rem; }
+
 .url-group { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem; }
 .url-row { display: flex; flex-direction: column; gap: 0.3rem; }
 .url-row label {
@@ -186,6 +205,19 @@ pre.snip-code {
       conversão específico para a página de obrigado — e publica o container.
     </p>
 
+    <!-- Container selector -->
+    {% if env.GTM_OAUTH_REFRESH_TOKEN %}
+    <div class="container-select-wrap">
+      <label>Container GTM</label>
+      <select class="container-select" id="container-select">
+        <option value="{{ env.GTM_PUBLIC_ID or '' }}">
+          {{ env.GTM_PUBLIC_ID or 'Carregando containers...' }}
+        </option>
+      </select>
+      <span class="container-loading" id="container-loading"></span>
+    </div>
+    {% endif %}
+
     <div class="url-group">
       <div class="url-row">
         <label>URL da página principal</label>
@@ -249,6 +281,32 @@ pre.snip-code {
 
 {% block scripts %}
 <script>
+// ── Carrega lista de containers ──────────────────────────────────────────────
+async function loadContainers() {
+  const sel     = document.getElementById('container-select');
+  const loading = document.getElementById('container-loading');
+  if (!sel) return;
+  loading && (loading.textContent = 'Buscando containers...');
+  try {
+    const r = await fetch('/api/gtm/containers');
+    const d = await r.json();
+    if (d.error) { loading && (loading.textContent = '⚠ ' + d.error); return; }
+    const current = sel.value;
+    sel.innerHTML = '';
+    (d.containers || []).forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.publicId;
+      opt.textContent = `${c.publicId} · ${c.name}`;
+      if (c.publicId === current) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    loading && (loading.textContent = d.containers.length + ' container(s) encontrado(s)');
+  } catch(e) {
+    loading && (loading.textContent = 'Erro ao carregar containers');
+  }
+}
+loadContainers();
+
 // ── Carrega snippet GTM ──────────────────────────────────────────────────────
 async function loadSnippet() {
   const el = document.getElementById('gtm-snippet');
@@ -291,9 +349,10 @@ async function runDeploy() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        main_url: mainUrl,
+        main_url:     mainUrl,
         thankyou_url: thankyouUrl,
-        publish: true,
+        public_id:    document.getElementById('container-select')?.value || '',
+        publish:      true,
       }),
     });
     const d = await r.json();
