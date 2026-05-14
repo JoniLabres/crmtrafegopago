@@ -180,6 +180,468 @@ def push_datalayer_event(event_name: str, data: dict) -> str:
     return f"window.dataLayer = window.dataLayer || []; window.dataLayer.push({payload});"
 
 
+# ── Deploy completo — cria tudo no GTM via API ────────────────────────────────
+
+_ALL_PAGES = "2147479553"  # Built-in GTM trigger ID for All Pages (PAGEVIEW)
+
+_UTM_ENGINE_HTML = """<script>
+(function(){
+  var K=['utm_source','utm_medium','utm_campaign','utm_content','utm_term','gclid','fbclid'];
+  var NS='ixc_',DAYS=30;
+  function parse(){var p=new URLSearchParams(location.search),d={},f=false;
+    K.forEach(function(k){var v=p.get(k);if(v){d[k]=v;f=true;}});return f?d:null;}
+  function setCk(n,v,days){var e=new Date();e.setDate(e.getDate()+days);
+    document.cookie=n+'='+encodeURIComponent(JSON.stringify(v))+';expires='+e.toUTCString()+';path=/;SameSite=Lax';}
+  function getCk(n){var m=document.cookie.match(new RegExp('(?:^|; )'+n+'=([^;]*)'));
+    try{return m?JSON.parse(decodeURIComponent(m[1])):null;}catch(e){return null;}}
+  function rLS(k){try{return JSON.parse(localStorage.getItem(NS+k)||'null');}catch(e){return null;}}
+  function wLS(k,v){try{localStorage.setItem(NS+k,JSON.stringify(v));}catch(e){}}
+  var u=parse();
+  if(u){
+    wLS('utm_last',u);setCk(NS+'utm_last',u,DAYS);
+    if(!rLS('utm_first')){wLS('utm_first',u);setCk(NS+'utm_first',u,365);}
+    window.dataLayer=window.dataLayer||[];
+    window.dataLayer.push(Object.assign({event:'utm_captured'},u));
+  }
+  window.IXC=window.IXC||{};
+  window.IXC.getUtmLast=function(){return rLS('utm_last')||getCk(NS+'utm_last')||{};};
+  window.IXC.getUtmFirst=function(){return rLS('utm_first')||getCk(NS+'utm_first')||{};};
+})();
+</script>"""
+
+_FORM_INJECTOR_HTML = """<script>
+(function(){
+  function fill(form){
+    if(!window.IXC)return;
+    var u=window.IXC.getUtmLast();
+    Object.keys(u).forEach(function(k){
+      var el=form.querySelector('input[name="'+k+'"]');
+      if(el)el.value=u[k];
+    });
+  }
+  document.querySelectorAll('form').forEach(fill);
+  new MutationObserver(function(ms){
+    ms.forEach(function(m){
+      m.addedNodes.forEach(function(n){
+        if(n.nodeName==='FORM')fill(n);
+        if(n.querySelectorAll)n.querySelectorAll('form').forEach(fill);
+      });
+    });
+  }).observe(document.body,{childList:true,subtree:true});
+  window.addEventListener('message',function(e){
+    if(e.data&&e.data.type==='hsFormCallback'&&e.data.eventName==='onFormReady'){
+      document.querySelectorAll('iframe.hs-form-iframe').forEach(function(f){
+        try{f.contentDocument.querySelectorAll('form').forEach(fill);}catch(err){}
+      });
+    }
+  });
+})();
+</script>"""
+
+_ENGAGEMENT_HTML = """<script>
+(function(){
+  // Scroll depth
+  var sf={};
+  window.addEventListener('scroll',function(){
+    var h=document.documentElement,pct=Math.round((h.scrollTop||document.body.scrollTop)/
+      ((h.scrollHeight||document.body.scrollHeight)-h.clientHeight)*100);
+    [25,50,75,100].forEach(function(m){
+      if(pct>=m&&!sf[m]){sf[m]=true;
+        window.dataLayer=window.dataLayer||[];
+        window.dataLayer.push({event:'scroll_depth',scroll_threshold:m});}
+    });
+  },{passive:true});
+  // Time on page
+  [15,30,60,120,300].forEach(function(s){
+    setTimeout(function(){
+      window.dataLayer=window.dataLayer||[];
+      window.dataLayer.push({event:'time_on_page',engagement_time_sec:s});
+    },s*1000);
+  });
+  // CTA clicks
+  document.addEventListener('click',function(e){
+    var b=e.target.closest('[data-cta],button,.btn-cta');
+    if(!b)return;
+    window.dataLayer=window.dataLayer||[];
+    window.dataLayer.push({event:'cta_click',cta_text:b.textContent.trim().slice(0,80),
+      cta_id:b.getAttribute('data-cta')||b.id||''});
+  });
+  // Exit intent
+  var ef=false;
+  document.addEventListener('mouseleave',function(e){
+    if(ef||e.clientY>20)return;ef=true;
+    window.dataLayer=window.dataLayer||[];
+    window.dataLayer.push({event:'exit_intent'});
+  });
+})();
+</script>"""
+
+
+def _html_tag(html: str) -> list:
+    return [
+        {"type": "TEMPLATE", "key": "html", "value": html},
+        {"type": "BOOLEAN", "key": "supportDocumentWrite", "value": "false"},
+    ]
+
+
+def _custom_event_trigger(name: str, event_name: str) -> dict:
+    return {
+        "name": name,
+        "type": "CUSTOM_EVENT",
+        "customEventFilter": [{
+            "type": "EQUALS",
+            "parameter": [
+                {"type": "TEMPLATE", "key": "arg0", "value": "{{_event}}"},
+                {"type": "TEMPLATE", "key": "arg1", "value": event_name},
+            ],
+        }],
+    }
+
+
+def deploy_all_tags(
+    ga4_id: str = "",
+    meta_pixel: str = "",
+    li_partner: str = "",
+    tiktok_pixel: str = "",
+    hs_portal_id: str = "",
+    workspace_id: str = "1",
+) -> dict:
+    """Creates/updates all tracking tags, triggers and variables in GTM via API.
+    Returns a log of every action taken."""
+    service = _get_service()
+    container = _container_path()
+    ws = f"{container}/workspaces/{workspace_id}"
+
+    log: list[str] = []
+
+    # ── Load existing items (deduplication) ──────────────────────────────────
+    existing = list_workspace(workspace_id)
+    ex_tags     = {t["name"]: t for t in existing["tags"]}
+    ex_triggers = {t["name"]: t for t in existing["triggers"]}
+    ex_vars     = {v["name"]: v for v in existing["variables"]}
+
+    def _upsert_var(body: dict):
+        name = body["name"]
+        if name in ex_vars:
+            body["fingerprint"] = ex_vars[name].get("fingerprint", "")
+            service.accounts().containers().workspaces().variables().update(
+                path=ex_vars[name]["path"], body=body).execute()
+            log.append(f"↺ Variável: {name}")
+        else:
+            service.accounts().containers().workspaces().variables().create(
+                parent=ws, body=body).execute()
+            log.append(f"✓ Variável criada: {name}")
+
+    def _upsert_trigger(body: dict) -> str:
+        name = body["name"]
+        if name in ex_triggers:
+            body["fingerprint"] = ex_triggers[name].get("fingerprint", "")
+            r = service.accounts().containers().workspaces().triggers().update(
+                path=ex_triggers[name]["path"], body=body).execute()
+            log.append(f"↺ Trigger: {name}")
+            return ex_triggers[name]["triggerId"]
+        else:
+            r = service.accounts().containers().workspaces().triggers().create(
+                parent=ws, body=body).execute()
+            log.append(f"✓ Trigger criado: {name}")
+            return r["triggerId"]
+
+    def _upsert_tag(body: dict):
+        name = body["name"]
+        if name in ex_tags:
+            body["fingerprint"] = ex_tags[name].get("fingerprint", "")
+            service.accounts().containers().workspaces().tags().update(
+                path=ex_tags[name]["path"], body=body).execute()
+            log.append(f"↺ Tag: {name}")
+        else:
+            service.accounts().containers().workspaces().tags().create(
+                parent=ws, body=body).execute()
+            log.append(f"✓ Tag criada: {name}")
+
+    # ── 1. Variáveis UTM (dataLayer) ────────────────────────────────────────
+    for k in ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"]:
+        _upsert_var({
+            "name": f"DLV - {k}",
+            "type": "v",
+            "parameter": [
+                {"type": "INTEGER", "key": "dataLayerVersion", "value": "2"},
+                {"type": "BOOLEAN", "key": "setDefaultValue",  "value": "false"},
+                {"type": "TEMPLATE", "key": "name",            "value": k},
+            ],
+        })
+
+    # Variáveis Custom JS (lê do localStorage — funciona mesmo sem UTM na URL atual)
+    for k in ["utm_source", "utm_medium", "utm_campaign"]:
+        _upsert_var({
+            "name": f"CJS - {k}",
+            "type": "jsm",
+            "parameter": [{"type": "TEMPLATE", "key": "javascript", "value":
+                f"function(){{try{{return JSON.parse(localStorage.getItem('ixc_utm_last')||'{{}}').{k}||'';}}catch(e){{return '';}}}}"}],
+        })
+
+    # ── 2. Triggers ──────────────────────────────────────────────────────────
+    lead_tid   = _upsert_trigger(_custom_event_trigger("CE - generate_lead",  "generate_lead"))
+    scroll_tid = _upsert_trigger(_custom_event_trigger("CE - scroll_depth",   "scroll_depth"))
+    cta_tid    = _upsert_trigger(_custom_event_trigger("CE - cta_click",      "cta_click"))
+    exit_tid   = _upsert_trigger(_custom_event_trigger("CE - exit_intent",    "exit_intent"))
+    time_tid   = _upsert_trigger(_custom_event_trigger("CE - time_on_page",   "time_on_page"))
+
+    # ── 3. Tags base (sempre presentes) ──────────────────────────────────────
+    _upsert_tag({
+        "name": "IXC - UTM Engine",
+        "type": "html",
+        "parameter": _html_tag(_UTM_ENGINE_HTML),
+        "firingTriggerId": [_ALL_PAGES],
+        "tagFiringOption": "oncePerPage",
+    })
+    _upsert_tag({
+        "name": "IXC - Form UTM Injector",
+        "type": "html",
+        "parameter": _html_tag(_FORM_INJECTOR_HTML),
+        "firingTriggerId": [_ALL_PAGES],
+        "tagFiringOption": "oncePerPage",
+    })
+    _upsert_tag({
+        "name": "IXC - Engagement Tracking",
+        "type": "html",
+        "parameter": _html_tag(_ENGAGEMENT_HTML),
+        "firingTriggerId": [_ALL_PAGES],
+        "tagFiringOption": "oncePerPage",
+    })
+
+    # ── 4. GA4 ───────────────────────────────────────────────────────────────
+    if ga4_id:
+        _upsert_tag({
+            "name": "GA4 - Configuration",
+            "type": "googtag",
+            "parameter": [{"type": "TEMPLATE", "key": "id", "value": ga4_id}],
+            "firingTriggerId": [_ALL_PAGES],
+        })
+        for evt, tid in [("generate_lead", lead_tid), ("scroll_depth", scroll_tid),
+                         ("cta_click", cta_tid), ("exit_intent", exit_tid)]:
+            _upsert_tag({
+                "name": f"GA4 - {evt}",
+                "type": "gaawe",
+                "parameter": [
+                    {"type": "TEMPLATE", "key": "measurementId", "value": ga4_id},
+                    {"type": "TEMPLATE", "key": "eventName",     "value": evt},
+                    {"type": "LIST", "key": "eventParameters", "list": [
+                        {"type": "MAP", "map": [
+                            {"type": "TEMPLATE", "key": "name",  "value": "utm_campaign"},
+                            {"type": "TEMPLATE", "key": "value", "value": "{{DLV - utm_campaign}}"},
+                        ]},
+                        {"type": "MAP", "map": [
+                            {"type": "TEMPLATE", "key": "name",  "value": "utm_source"},
+                            {"type": "TEMPLATE", "key": "value", "value": "{{DLV - utm_source}}"},
+                        ]},
+                    ]},
+                ],
+                "firingTriggerId": [str(tid)],
+            })
+        log.append(f"  → GA4 ({ga4_id}): Configuration + 4 eventos")
+
+    # ── 5. Meta Pixel ────────────────────────────────────────────────────────
+    if meta_pixel:
+        _upsert_tag({
+            "name": "Meta Pixel - PageView",
+            "type": "html",
+            "parameter": _html_tag(
+                f"<script>!function(f,b,e,v,n,t,s){{if(f.fbq)return;n=f.fbq=function(){{n.callMethod?"
+                f"n.callMethod.apply(n,arguments):n.queue.push(arguments)}};if(!f._fbq)f._fbq=n;n.push=n;"
+                f"n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;"
+                f"s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}}(window,document,"
+                f"'script','https://connect.facebook.net/en_US/fbevents.js');"
+                f"fbq('init','{meta_pixel}');fbq('track','PageView');\n</script>"
+            ),
+            "firingTriggerId": [_ALL_PAGES],
+        })
+        _upsert_tag({
+            "name": "Meta Pixel - Lead",
+            "type": "html",
+            "parameter": _html_tag(
+                "<script>var _u=(window.IXC&&window.IXC.getUtmLast())||{};"
+                "fbq('track','Lead',{utm_campaign:_u.utm_campaign||'{{DLV - utm_campaign}}',"
+                "utm_source:_u.utm_source||'{{DLV - utm_source}}',currency:'BRL',value:0});\n</script>"
+            ),
+            "firingTriggerId": [str(lead_tid)],
+        })
+        log.append(f"  → Meta Pixel ({meta_pixel}): PageView + Lead")
+
+    # ── 6. LinkedIn ──────────────────────────────────────────────────────────
+    if li_partner:
+        _upsert_tag({
+            "name": "LinkedIn - Insight Tag",
+            "type": "html",
+            "parameter": _html_tag(
+                f'<script>_linkedin_partner_id="{li_partner}";'
+                f'window._linkedin_data_partner_ids=window._linkedin_data_partner_ids||[];'
+                f'window._linkedin_data_partner_ids.push(_linkedin_partner_id);</script>'
+                f'<script async src="https://snap.licdn.com/li.lms-analytics/insight.min.js"></script>'
+            ),
+            "firingTriggerId": [_ALL_PAGES],
+        })
+        log.append(f"  → LinkedIn Insight Tag ({li_partner})")
+
+    # ── 7. TikTok ────────────────────────────────────────────────────────────
+    if tiktok_pixel:
+        _upsert_tag({
+            "name": "TikTok Pixel - PageView",
+            "type": "html",
+            "parameter": _html_tag(
+                f"<script>!function(w,d,t){{w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];"
+                f"ttq.methods=['page','track','identify'];ttq.setAndDefer=function(t,e){{t[e]=function()"
+                f"{{t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}}};for(var i=0;i<ttq.methods.length;i++)"
+                f"ttq.setAndDefer(ttq,ttq.methods[i]);ttq.load=function(e){{var i='https://analytics.tiktok.com/i18n/pixel/events.js';"
+                f"ttq._i=ttq._i||{{}},ttq._i[e]=[],ttq._t=ttq._t||{{}},ttq._t[e]=+new Date;"
+                f"var o=document.createElement('script');o.type='text/javascript',o.async=!0,"
+                f"o.src=i+'?sdkid='+e+'&lib='+t;var a=document.getElementsByTagName('script')[0];"
+                f"a.parentNode.insertBefore(o,a)}};ttq.load('{tiktok_pixel}');ttq.page()}}"
+                f"(window,document,'ttq');\n</script>"
+            ),
+            "firingTriggerId": [_ALL_PAGES],
+        })
+        _upsert_tag({
+            "name": "TikTok Pixel - Lead",
+            "type": "html",
+            "parameter": _html_tag("<script>ttq.track('SubmitForm');\n</script>"),
+            "firingTriggerId": [str(lead_tid)],
+        })
+        log.append(f"  → TikTok Pixel ({tiktok_pixel}): PageView + Lead")
+
+    # ── 8. HubSpot ───────────────────────────────────────────────────────────
+    if hs_portal_id:
+        _upsert_tag({
+            "name": "HubSpot - Tracking Code",
+            "type": "html",
+            "parameter": _html_tag(
+                f'<script type="text/javascript" id="hs-script-loader" async defer '
+                f'src="//js.hs-scripts.com/{hs_portal_id}.js"></script>'
+            ),
+            "firingTriggerId": [_ALL_PAGES],
+        })
+        log.append(f"  → HubSpot Tracking (portal {hs_portal_id})")
+
+    summary = (
+        f"Deploy concluído: {len([l for l in log if l.startswith('✓')])} criados, "
+        f"{len([l for l in log if l.startswith('↺')])} atualizados"
+    )
+    log.append(summary)
+    return {"log": log, "ok": True}
+
+
+def generate_mega_snippet(
+    gtm_public_id: str = "",
+    ga4_id: str = "",
+    meta_pixel: str = "",
+    li_partner: str = "",
+    tiktok_pixel: str = "",
+    hs_portal_id: str = "",
+) -> str:
+    """Generates a single all-in-one tracking script for pages without GTM."""
+    parts = ["<!-- IXCTraffic — Mega Snippet de Rastreamento -->", "<script>"]
+
+    parts.append("// ── UTM Engine ─────────────────────────────────────────")
+    parts.append("""(function(){
+  var K=['utm_source','utm_medium','utm_campaign','utm_content','utm_term','gclid','fbclid'],NS='ixc_';
+  function parse(){var p=new URLSearchParams(location.search),d={},f=false;
+    K.forEach(function(k){var v=p.get(k);if(v){d[k]=v;f=true;}});return f?d:null;}
+  function setCk(n,v,d){var e=new Date();e.setDate(e.getDate()+d);
+    document.cookie=n+'='+encodeURIComponent(JSON.stringify(v))+';expires='+e.toUTCString()+';path=/;SameSite=Lax';}
+  function getCk(n){var m=document.cookie.match(new RegExp('(?:^|; )'+n+'=([^;]*)'));
+    try{return m?JSON.parse(decodeURIComponent(m[1])):null;}catch(e){return null;}}
+  function rLS(k){try{return JSON.parse(localStorage.getItem(NS+k)||'null');}catch(e){return null;}}
+  function wLS(k,v){try{localStorage.setItem(NS+k,JSON.stringify(v));}catch(e){}}
+  var u=parse();if(u){wLS('utm_last',u);setCk(NS+'utm_last',u,30);
+    if(!rLS('utm_first')){wLS('utm_first',u);setCk(NS+'utm_first',u,365);}
+    window.dataLayer=window.dataLayer||[];window.dataLayer.push(Object.assign({event:'utm_captured'},u));}
+  window.IXC=window.IXC||{};
+  window.IXC.getUtmLast=function(){return rLS('utm_last')||getCk(NS+'utm_last')||{};};
+  window.IXC.getUtmFirst=function(){return rLS('utm_first')||getCk(NS+'utm_first')||{};};
+})();""")
+
+    parts.append("""// ── Engagement (scroll, tempo, CTA, exit intent) ───────
+(function(){
+  var sf={};
+  window.addEventListener('scroll',function(){
+    var h=document.documentElement,pct=Math.round((h.scrollTop||document.body.scrollTop)/
+      ((h.scrollHeight||document.body.scrollHeight)-h.clientHeight)*100);
+    [25,50,75,100].forEach(function(m){if(pct>=m&&!sf[m]){sf[m]=true;
+      window.dataLayer=window.dataLayer||[];window.dataLayer.push({event:'scroll_depth',scroll_threshold:m});}});
+  },{passive:true});
+  [15,30,60,120,300].forEach(function(s){setTimeout(function(){
+    window.dataLayer=window.dataLayer||[];window.dataLayer.push({event:'time_on_page',engagement_time_sec:s});
+  },s*1000);});
+  document.addEventListener('click',function(e){var b=e.target.closest('[data-cta],button');if(!b)return;
+    window.dataLayer=window.dataLayer||[];window.dataLayer.push({event:'cta_click',cta_text:b.textContent.trim().slice(0,80)});});
+  var ef=false;document.addEventListener('mouseleave',function(e){if(ef||e.clientY>20)return;ef=true;
+    window.dataLayer=window.dataLayer||[];window.dataLayer.push({event:'exit_intent'});});
+})();""")
+
+    parts.append("</script>")
+
+    if gtm_public_id:
+        parts.append(f"""<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){{w[l]=w[l]||[];w[l].push({{'gtm.start':new Date().getTime(),event:'gtm.js'}});
+var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;
+j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+}})(window,document,'script','dataLayer','{gtm_public_id}');</script>
+<!-- End Google Tag Manager -->""")
+
+    if ga4_id and not gtm_public_id:
+        parts.append(f"""<!-- GA4 -->
+<script async src="https://www.googletagmanager.com/gtag/js?id={ga4_id}"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){{dataLayer.push(arguments);}}
+gtag('js',new Date());gtag('config','{ga4_id}');</script>""")
+
+    if meta_pixel:
+        parts.append(f"""<!-- Meta Pixel -->
+<script>!function(f,b,e,v,n,t,s){{if(f.fbq)return;n=f.fbq=function(){{n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)}};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;
+n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;
+s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}}(window,document,'script',
+'https://connect.facebook.net/en_US/fbevents.js');fbq('init','{meta_pixel}');fbq('track','PageView');
+</script>""")
+
+    if li_partner:
+        parts.append(f"""<!-- LinkedIn Insight Tag -->
+<script>_linkedin_partner_id="{li_partner}";
+window._linkedin_data_partner_ids=window._linkedin_data_partner_ids||[];
+window._linkedin_data_partner_ids.push(_linkedin_partner_id);</script>
+<script async src="https://snap.licdn.com/li.lms-analytics/insight.min.js"></script>""")
+
+    if tiktok_pixel:
+        parts.append(f"""<!-- TikTok Pixel -->
+<script>!function(w,d,t){{w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];
+ttq.methods=['page','track','identify'];ttq.setAndDefer=function(t,e){{t[e]=function(){{
+t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}}};
+for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);
+ttq.load=function(e){{var i='https://analytics.tiktok.com/i18n/pixel/events.js';
+ttq._i=ttq._i||{{}},ttq._i[e]=[],ttq._t=ttq._t||{{}},ttq._t[e]=+new Date;
+var o=document.createElement('script');o.async=!0,o.src=i+'?sdkid='+e+'&lib='+t;
+document.getElementsByTagName('script')[0].parentNode.insertBefore(o,a)}};
+ttq.load('{tiktok_pixel}');ttq.page()}}(window,document,'ttq');\n</script>""")
+
+    if hs_portal_id:
+        parts.append(f"""<!-- HubSpot -->
+<script type="text/javascript" id="hs-script-loader" async defer
+  src="//js.hs-scripts.com/{hs_portal_id}.js"></script>""")
+
+    parts.append("""<!-- Injeção de UTMs nos formulários -->
+<script>
+(function(){
+  function fill(f){if(!window.IXC)return;var u=window.IXC.getUtmLast();
+    Object.keys(u).forEach(function(k){var el=f.querySelector('input[name="'+k+'"]');if(el)el.value=u[k];});}
+  document.querySelectorAll('form').forEach(fill);
+  new MutationObserver(function(ms){ms.forEach(function(m){m.addedNodes.forEach(function(n){
+    if(n.nodeName==='FORM')fill(n);if(n.querySelectorAll)n.querySelectorAll('form').forEach(fill);});});
+  }).observe(document.body,{childList:true,subtree:true});
+})();
+</script>""")
+
+    parts.append("<!-- Fim IXCTraffic Mega Snippet -->")
+    return "\n".join(parts)
+
+
 if __name__ == "__main__":
     import sys
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")

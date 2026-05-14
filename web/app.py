@@ -2295,6 +2295,68 @@ async def gtm_snippet():
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@app.post("/api/rastreamento/deploy")
+async def rastreamento_deploy(request: Request):
+    """Deploys all tracking tags, triggers and variables to GTM via API, then publishes."""
+    _apply_env_overrides()
+    data = await request.json()
+    product      = data.get("product", "")
+    workspace_id = data.get("workspace_id", "1")
+    publish      = data.get("publish", True)
+
+    env      = _get_env()
+    accounts = _load_accounts()
+    produto  = next((p for p in accounts if p["nome"] == product), None)
+    r        = produto.get("rastreamento", {}) if produto else {}
+    contas   = produto.get("contas", {})       if produto else {}
+
+    ga4_id       = r.get("ga4_measurement_id")                   or env.get("GA4_MEASUREMENT_ID", "")
+    meta_pixel   = contas.get("meta",{}).get("pixel_id")         or env.get("META_PIXEL_ID", "")
+    li_partner   = contas.get("linkedin",{}).get("partner_id")   or env.get("LINKEDIN_PARTNER_ID", "")
+    tiktok_pixel = contas.get("tiktok",{}).get("pixel_id")       or env.get("TIKTOK_PIXEL_ID", "")
+    hs_portal    = env.get("HUBSPOT_PORTAL_ID", "")
+
+    try:
+        sys.path.insert(0, str(ROOT / "tracking"))
+        from gtm_integration import deploy_all_tags, publish_workspace
+        result = deploy_all_tags(
+            ga4_id=ga4_id, meta_pixel=meta_pixel, li_partner=li_partner,
+            tiktok_pixel=tiktok_pixel, hs_portal_id=hs_portal,
+            workspace_id=workspace_id,
+        )
+        if publish:
+            pub = publish_workspace(workspace_id=workspace_id, note="Deploy via IXCTraffic")
+            result["published"] = True
+            result["version_id"] = pub.get("version_id")
+            result["log"].append(f"✓ Container GTM publicado (versão {pub.get('version_id')})")
+        return result
+    except EnvironmentError as e:
+        return JSONResponse({"error": str(e), "ok": False}, status_code=400)
+    except Exception as e:
+        logger.error("GTM deploy error: %s", e)
+        return JSONResponse({"error": str(e), "ok": False}, status_code=500)
+
+
+@app.get("/api/rastreamento/mega-snippet")
+async def rastreamento_mega_snippet(product: str = ""):
+    _apply_env_overrides()
+    env      = _get_env()
+    accounts = _load_accounts()
+    produto  = next((p for p in accounts if p["nome"] == product), None)
+    r        = produto.get("rastreamento", {}) if produto else {}
+    contas   = produto.get("contas", {})       if produto else {}
+    from gtm_integration import generate_mega_snippet
+    snippet = generate_mega_snippet(
+        gtm_public_id = r.get("gtm_public_id") or env.get("GTM_PUBLIC_ID", ""),
+        ga4_id        = r.get("ga4_measurement_id") or env.get("GA4_MEASUREMENT_ID", ""),
+        meta_pixel    = contas.get("meta",{}).get("pixel_id") or env.get("META_PIXEL_ID", ""),
+        li_partner    = contas.get("linkedin",{}).get("partner_id") or env.get("LINKEDIN_PARTNER_ID", ""),
+        tiktok_pixel  = contas.get("tiktok",{}).get("pixel_id") or env.get("TIKTOK_PIXEL_ID", ""),
+        hs_portal_id  = env.get("HUBSPOT_PORTAL_ID", ""),
+    )
+    return {"snippet": snippet}
+
+
 @app.post("/api/gtm/publish")
 async def gtm_publish(request: Request):
     try:
