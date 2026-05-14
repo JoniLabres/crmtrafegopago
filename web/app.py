@@ -2359,6 +2359,7 @@ async def ga4_event(request: Request):
 
 @app.get("/api/gtm/verify")
 async def gtm_verify():
+    _apply_env_overrides()
     try:
         sys.path.insert(0, str(ROOT / "tracking"))
         from gtm_integration import verify_setup
@@ -2373,6 +2374,7 @@ async def gtm_verify():
 
 @app.get("/api/gtm/snippet")
 async def gtm_snippet():
+    _apply_env_overrides()
     try:
         sys.path.insert(0, str(ROOT / "tracking"))
         from gtm_integration import get_snippet
