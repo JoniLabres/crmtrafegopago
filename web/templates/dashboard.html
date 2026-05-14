@@ -224,6 +224,45 @@
 </div>
 {% endif %}
 
+<!-- Charts -->
+<div class="grid-2" style="margin-top:1.5rem;">
+  <!-- Spend + Leads por dia -->
+  <div class="panel">
+    <div class="panel-head">
+      <h3>Investimento × Leads</h3>
+      <span class="text-muted text-sm">por dia · últimos {{ days }}d</span>
+    </div>
+    <div class="panel-body" style="padding:1rem 1.25rem;">
+      <canvas id="chartTrend" height="200"></canvas>
+    </div>
+  </div>
+
+  <!-- Donut: Spend por canal -->
+  <div class="panel">
+    <div class="panel-head">
+      <h3>Distribuição de Investimento</h3>
+      <span class="text-muted text-sm">por canal</span>
+    </div>
+    <div class="panel-body" style="padding:1rem 1.25rem;display:flex;align-items:center;gap:1.5rem;">
+      <div style="flex-shrink:0;width:180px;height:180px;position:relative;">
+        <canvas id="chartDonut"></canvas>
+      </div>
+      <div id="donut-legend" style="flex:1;display:flex;flex-direction:column;gap:0.5rem;font-size:0.8rem;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Funil de Conversão -->
+<div class="panel" style="margin-top:1.5rem;">
+  <div class="panel-head">
+    <h3>Funil de Conversão</h3>
+    <span class="text-muted text-sm">últimos {{ days }}d</span>
+  </div>
+  <div class="panel-body" style="padding:1rem 1.25rem;">
+    <canvas id="chartFunnel" height="80"></canvas>
+  </div>
+</div>
+
 <div class="grid-2">
   <!-- Desempenho por canal -->
   <div class="panel">
@@ -359,7 +398,170 @@
 <style>
 .text-danger { color: #ff5050; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
+// ── Charts ─────────────────────────────────────────────────────────────────
+const _CHANNEL_COLORS = {
+  meta:       '#1877F2',
+  facebook:   '#1877F2',
+  google:     '#EA4335',
+  linkedin:   '#0A66C2',
+  tiktok:     '#010101',
+  programatica: '#9B59B6',
+};
+const _FALLBACK_COLORS = ['#a3ff00','#00c8d4','#ff6b9d','#ffd166','#06d6a0','#7c3aed'];
+const _GRID = 'rgba(255,255,255,0.06)';
+const _TEXT = '#888';
+
+Chart.defaults.color = _TEXT;
+Chart.defaults.font.family = "'Inter', sans-serif";
+
+async function loadCharts() {
+  const params = new URLSearchParams(window.location.search);
+  const qs = params.toString() ? '?' + params.toString() : '';
+  let data;
+  try {
+    const r = await fetch('/api/dashboard/chart-data' + qs);
+    data = await r.json();
+  } catch(e) { return; }
+
+  // ── Trend: Spend + Leads por dia ───────────────────────────────────────
+  const tCtx = document.getElementById('chartTrend');
+  if (tCtx && data.daily?.length) {
+    const labels = data.daily.map(d => d.date.slice(5)); // MM-DD
+    new Chart(tCtx, {
+      data: {
+        labels,
+        datasets: [
+          {
+            type: 'bar',
+            label: 'Investimento (R$)',
+            data: data.daily.map(d => d.spend),
+            backgroundColor: 'rgba(163,255,0,0.25)',
+            borderColor: 'rgba(163,255,0,0.7)',
+            borderWidth: 1,
+            borderRadius: 3,
+            yAxisID: 'ySpend',
+            order: 2,
+          },
+          {
+            type: 'line',
+            label: 'Leads',
+            data: data.daily.map(d => d.leads),
+            borderColor: '#00c8d4',
+            backgroundColor: 'rgba(0,200,212,0.1)',
+            borderWidth: 2,
+            pointRadius: 3,
+            tension: 0.35,
+            fill: true,
+            yAxisID: 'yLeads',
+            order: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'top', labels: { boxWidth: 12, padding: 16 } } },
+        scales: {
+          x: { grid: { color: _GRID }, ticks: { maxTicksLimit: 10 } },
+          ySpend: {
+            position: 'left',
+            grid: { color: _GRID },
+            ticks: { callback: v => 'R$' + (v >= 1000 ? (v/1000).toFixed(1)+'k' : v) },
+          },
+          yLeads: {
+            position: 'right',
+            grid: { drawOnChartArea: false },
+            ticks: { precision: 0 },
+          },
+        },
+      },
+    });
+  } else if (tCtx) {
+    tCtx.parentElement.innerHTML = '<p style="text-align:center;color:var(--muted);padding:3rem 0;font-size:0.85rem;">Sem dados no período</p>';
+  }
+
+  // ── Donut: Spend por canal ─────────────────────────────────────────────
+  const dCtx = document.getElementById('chartDonut');
+  const legend = document.getElementById('donut-legend');
+  if (dCtx && data.channels?.length) {
+    const labels  = data.channels.map(c => c.channel);
+    const values  = data.channels.map(c => c.spend);
+    const total   = values.reduce((a, b) => a + b, 0);
+    const colors  = labels.map((l, i) => _CHANNEL_COLORS[l] || _FALLBACK_COLORS[i % _FALLBACK_COLORS.length]);
+    new Chart(dCtx, {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, hoverOffset: 6 }] },
+      options: {
+        responsive: false,
+        cutout: '72%',
+        plugins: { legend: { display: false }, tooltip: {
+          callbacks: { label: ctx => ` R$ ${ctx.parsed.toLocaleString('pt-BR',{minimumFractionDigits:0})} (${(ctx.parsed/total*100).toFixed(1)}%)` }
+        }},
+      },
+    });
+    // Custom legend
+    legend.innerHTML = data.channels.map((c, i) => `
+      <div style="display:flex;align-items:center;gap:0.5rem;">
+        <span style="width:10px;height:10px;border-radius:2px;background:${colors[i]};flex-shrink:0;"></span>
+        <span style="flex:1;text-transform:capitalize;">${c.channel}</span>
+        <span style="font-weight:600;color:var(--text);">R$ ${Math.round(c.spend).toLocaleString('pt-BR')}</span>
+        <span style="color:var(--muted);">${(c.spend/total*100).toFixed(1)}%</span>
+      </div>
+    `).join('');
+  } else if (dCtx) {
+    dCtx.closest('.panel-body').innerHTML = '<p style="text-align:center;color:var(--muted);padding:2rem 0;font-size:0.85rem;">Sem dados</p>';
+  }
+
+  // ── Funnel ─────────────────────────────────────────────────────────────
+  const fCtx = document.getElementById('chartFunnel');
+  if (fCtx && data.funnel?.length) {
+    const max = data.funnel[0]?.value || 1;
+    new Chart(fCtx, {
+      type: 'bar',
+      data: {
+        labels: data.funnel.map(f => f.label),
+        datasets: [{
+          data: data.funnel.map(f => f.value),
+          backgroundColor: [
+            'rgba(163,255,0,0.7)',
+            'rgba(0,200,212,0.7)',
+            'rgba(100,180,255,0.7)',
+            'rgba(200,150,255,0.7)',
+            'rgba(0,200,100,0.85)',
+          ],
+          borderRadius: 4,
+          borderSkipped: false,
+        }],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: {
+            label: ctx => {
+              const prev = data.funnel[ctx.dataIndex - 1]?.value;
+              const pct  = prev ? ` (${(ctx.parsed.x / prev * 100).toFixed(1)}% do anterior)` : '';
+              return ` ${ctx.parsed.x.toLocaleString('pt-BR')}${pct}`;
+            }
+          }},
+        },
+        scales: {
+          x: { grid: { color: _GRID }, ticks: { precision: 0 } },
+          y: { grid: { display: false } },
+        },
+      },
+    });
+  } else if (fCtx) {
+    fCtx.parentElement.parentElement.style.display = 'none';
+  }
+}
+
+loadCharts();
+
+// ── Sync / Date change ──────────────────────────────────────────────────────
 async function syncData(btn) {
   const orig = btn.textContent;
   btn.textContent = '↻ Sincronizando...';

@@ -348,6 +348,78 @@ async def hubspot_exchange(code: str, base_url: str) -> dict:
         return r.json()
 
 
+# ── Google Tag Manager ────────────────────────────────────────────────────────
+
+def gtm_auth_url(base_url: str) -> tuple[str, str]:
+    state = generate_state("gtm")
+    params = {
+        "client_id": os.getenv("GTM_CLIENT_ID", ""),
+        "redirect_uri": _redirect_uri(base_url, "gtm"),
+        "response_type": "code",
+        "scope": " ".join([
+            "https://www.googleapis.com/auth/tagmanager.edit.containers",
+            "https://www.googleapis.com/auth/tagmanager.publish",
+            "https://www.googleapis.com/auth/tagmanager.readonly",
+        ]),
+        "access_type": "offline",
+        "prompt": "consent",
+        "state": state,
+    }
+    return "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params), state
+
+
+async def gtm_exchange(code: str, base_url: str) -> dict:
+    async with httpx.AsyncClient() as client:
+        r = await client.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": os.getenv("GTM_CLIENT_ID"),
+                "client_secret": os.getenv("GTM_CLIENT_SECRET"),
+                "redirect_uri": _redirect_uri(base_url, "gtm"),
+                "grant_type": "authorization_code",
+            },
+            timeout=15,
+        )
+        r.raise_for_status()
+        return r.json()
+
+
+async def gtm_list_containers(refresh_token: str) -> list[dict]:
+    """List GTM containers for the configured account using a refresh token."""
+    account_id = os.getenv("GTM_ACCOUNT_ID", "")
+    if not account_id:
+        return []
+    async with httpx.AsyncClient() as client:
+        tr = await client.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "client_id": os.getenv("GTM_CLIENT_ID"),
+                "client_secret": os.getenv("GTM_CLIENT_SECRET"),
+                "refresh_token": refresh_token,
+                "grant_type": "refresh_token",
+            },
+            timeout=15,
+        )
+        tr.raise_for_status()
+        access_token = tr.json().get("access_token", "")
+        r = await client.get(
+            f"https://www.googleapis.com/tagmanager/v2/accounts/{account_id}/containers",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=15,
+        )
+        if r.status_code != 200:
+            return []
+        return [
+            {
+                "id": c.get("containerId", ""),
+                "name": c.get("name", ""),
+                "public_id": c.get("publicId", ""),
+            }
+            for c in r.json().get("container", [])
+        ]
+
+
 async def hubspot_get_portal_info(access_token: str) -> dict:
     """Return portal metadata: hub_id (portal ID), hub_domain, app_id, scopes."""
     async with httpx.AsyncClient() as client:

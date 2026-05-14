@@ -8,6 +8,8 @@
   <p class="page-desc">
     {% if channel == 'hubspot' %}
       Confirme o portal do HubSpot que será sincronizado com o IXCTraffic.
+    {% elif channel == 'gtm' %}
+      Selecione o container GTM que será usado para o deploy de rastreamento.
     {% else %}
       Selecione qual conta de anúncios deseja usar com o IXCTraffic.
     {% endif %}

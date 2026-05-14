@@ -56,9 +56,19 @@ _PUBLIC_PREFIXES = (
     "/api/pipeline/cron",  # job agendado externo
 )
 
+def _auth_enabled() -> bool:
+    """Auth só ativa quando DATABASE_URL está configurada."""
+    return bool(os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL"))
+
+
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     path = request.url.path
+
+    # Sem banco configurado → ferramenta funciona sem login
+    if not _auth_enabled():
+        request.state.user = {"id": 0, "email": "admin@local", "name": "Admin", "role": "admin"}
+        return await call_next(request)
 
     # Permite paths públicos
     if any(path.startswith(p) for p in _PUBLIC_PREFIXES):
@@ -71,7 +81,7 @@ async def auth_middleware(request: Request, call_next):
                 return JSONResponse({"error": "Setup pendente"}, status_code=503)
             return RedirectResponse("/setup", status_code=302)
     except Exception:
-        pass  # DB offline — deixa passar para exibir erro natural
+        pass  # DB offline — deixa passar
 
     # Verifica sessão
     token = request.cookies.get("ixc_session")
@@ -80,14 +90,11 @@ async def auth_middleware(request: Request, call_next):
     if user is None:
         if path.startswith("/api/"):
             return JSONResponse({"error": "Não autenticado"}, status_code=401)
-        # Só usa `next` se for uma página normal (não admin)
         next_url = path if not path.startswith("/admin") else "/"
         return RedirectResponse(f"/login?next={next_url}", status_code=302)
 
     # Admin-only: /admin/*
     if path.startswith("/admin/") and user.get("role") != "admin":
-        # GET (browser) → redireciona ao dashboard silenciosamente
-        # POST/PATCH/DELETE (AJAX) → retorna 403 JSON
         if request.method == "GET":
             return RedirectResponse("/", status_code=302)
         return JSONResponse({"error": "Acesso restrito a administradores"}, status_code=403)
@@ -125,12 +132,14 @@ _ENV_KEYS = [
     "LINKEDIN_ACCESS_TOKEN","LINKEDIN_AD_ACCOUNT_ID","LINKEDIN_PARTNER_ID",
     "TIKTOK_CLIENT_ID","TIKTOK_CLIENT_SECRET",
     "TIKTOK_ACCESS_TOKEN","TIKTOK_AD_ACCOUNT_ID","TIKTOK_PIXEL_ID",
+    "GTM_CLIENT_ID","GTM_CLIENT_SECRET","GTM_OAUTH_REFRESH_TOKEN",
     "HUBSPOT_CLIENT_ID","HUBSPOT_CLIENT_SECRET","HUBSPOT_ACCESS_TOKEN","HUBSPOT_REFRESH_TOKEN",
     "HUBSPOT_PORTAL_ID","HUBSPOT_API_KEY",
     "ANTHROPIC_API_KEY","SLACK_WEBHOOK_URL","DATABASE_URL","APP_BASE_URL",
     "GA4_MEASUREMENT_ID","GA4_PROPERTY_ID","GA4_API_SECRET","GA4_CREDENTIALS_JSON",
     "GTM_ACCOUNT_ID","GTM_CONTAINER_ID","GTM_PUBLIC_ID","GTM_CREDENTIALS_JSON",
     "SLACK_BOT_TOKEN","SLACK_SIGNING_SECRET",
+    "SMTP_HOST","SMTP_PORT","SMTP_USER","SMTP_PASSWORD","SMTP_FROM","APP_URL",
 ]
 
 
@@ -576,6 +585,67 @@ async def dashboard(request: Request):
             f"<b>Dashboard error</b> — {type(exc).__name__}: {exc}\n\n{tb}</pre>",
             status_code=500,
         )
+
+@app.get("/api/dashboard/chart-data")
+async def dashboard_chart_data(days: int = 30, produto: str = ""):
+    """Returns daily spend/leads trend and channel breakdown for charts."""
+    _apply_env_overrides()
+    try:
+        import psycopg2
+        conn = psycopg2.connect(get_db_url())
+        p_filter = "AND produto = %s" if produto else ""
+        params = (days, produto) if produto else (days,)
+
+        with conn.cursor() as cur:
+            # Daily totals (all channels combined)
+            cur.execute(f"""
+                SELECT date::text, COALESCE(SUM(spend),0), COALESCE(SUM(leads),0)
+                FROM campaigns_daily
+                WHERE date >= CURRENT_DATE - %s {p_filter}
+                GROUP BY date ORDER BY date
+            """, params)
+            daily = [{"date": r[0], "spend": float(r[1]), "leads": int(r[2])}
+                     for r in cur.fetchall()]
+
+            # Spend by channel
+            cur.execute(f"""
+                SELECT channel, COALESCE(SUM(spend),0), COALESCE(SUM(leads),0)
+                FROM campaigns_daily
+                WHERE date >= CURRENT_DATE - %s {p_filter}
+                GROUP BY channel ORDER BY SUM(spend) DESC
+            """, params)
+            channels = [{"channel": r[0], "spend": float(r[1]), "leads": int(r[2])}
+                        for r in cur.fetchall()]
+
+            # Funil summary
+            mqls = sqls = sals = deals_closed = leads_total = 0
+            try:
+                cur.execute(f"""
+                    SELECT COALESCE(SUM(leads),0), COALESCE(SUM(mqls),0),
+                           COALESCE(SUM(sqls),0), COALESCE(SUM(sals),0),
+                           COALESCE(SUM(deals_closed),0)
+                    FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
+                """, params)
+                leads_total, mqls, sqls, sals, deals_closed = cur.fetchone()
+            except Exception:
+                conn.rollback()
+
+        conn.close()
+        return {
+            "daily": daily,
+            "channels": channels,
+            "funnel": [
+                {"label": "Leads",    "value": int(leads_total)},
+                {"label": "MQL",      "value": int(mqls)},
+                {"label": "SQL",      "value": int(sqls)},
+                {"label": "SAL",      "value": int(sals)},
+                {"label": "Fechados", "value": int(deals_closed)},
+            ],
+        }
+    except Exception as exc:
+        logger.warning("chart-data error: %s", exc)
+        return {"daily": [], "channels": [], "funnel": []}
+
 
 @app.get("/conexoes", response_class=HTMLResponse)
 async def conexoes(request: Request):
@@ -2049,6 +2119,7 @@ _CHANNEL_NAMES = {
     "linkedin": "LinkedIn Ads",
     "tiktok": "TikTok Ads",
     "hubspot": "HubSpot CRM",
+    "gtm": "Google Tag Manager",
 }
 
 _CHANNEL_CLIENT_ID_VARS = {
@@ -2057,6 +2128,7 @@ _CHANNEL_CLIENT_ID_VARS = {
     "linkedin": "LINKEDIN_CLIENT_ID",
     "tiktok": "TIKTOK_CLIENT_ID",
     "hubspot": "HUBSPOT_CLIENT_ID",
+    "gtm": "GTM_CLIENT_ID",
 }
 
 
@@ -2070,7 +2142,7 @@ def _base_url(request: Request) -> str:
 @app.get("/auth/connect/{channel}")
 async def auth_connect(channel: str, request: Request):
     _apply_env_overrides()
-    from oauth_flows import meta_auth_url, google_auth_url, linkedin_auth_url, tiktok_auth_url, hubspot_auth_url
+    from oauth_flows import meta_auth_url, google_auth_url, linkedin_auth_url, tiktok_auth_url, hubspot_auth_url, gtm_auth_url
 
     client_id_var = _CHANNEL_CLIENT_ID_VARS.get(channel)
     if not client_id_var or not os.getenv(client_id_var):
@@ -2089,6 +2161,7 @@ async def auth_connect(channel: str, request: Request):
         "linkedin": linkedin_auth_url,
         "tiktok": tiktok_auth_url,
         "hubspot": hubspot_auth_url,
+        "gtm": gtm_auth_url,
     }
     url, _ = builders[channel](base)
     return RedirectResponse(url)
@@ -2104,6 +2177,7 @@ async def auth_callback(channel: str, request: Request):
         linkedin_exchange, linkedin_list_accounts,
         tiktok_exchange, tiktok_list_accounts,
         hubspot_exchange, hubspot_get_portal_info,
+        gtm_exchange, gtm_list_containers,
     )
 
     params = dict(request.query_params)
@@ -2173,6 +2247,18 @@ async def auth_callback(channel: str, request: Request):
             _save_env_token("TIKTOK_ACCESS_TOKEN", access_token)
             accounts = await tiktok_list_accounts(access_token)
 
+        elif channel == "gtm":
+            token_data    = await gtm_exchange(code, base)
+            refresh_token = token_data.get("refresh_token", "")
+            if refresh_token:
+                _save_env_token("GTM_OAUTH_REFRESH_TOKEN", refresh_token)
+            containers = await gtm_list_containers(refresh_token) if refresh_token else []
+            # Show each container as selectable account; name includes public ID
+            accounts = [
+                {"id": c["id"], "name": f"{c['name']} ({c['public_id']})"}
+                for c in containers
+            ]
+
         elif channel == "hubspot":
             token_data = await hubspot_exchange(code, base)
             access_token = token_data.get("access_token", "")
@@ -2219,6 +2305,7 @@ async def auth_select(request: Request):
         "linkedin": "LINKEDIN_AD_ACCOUNT_ID",
         "tiktok": "TIKTOK_AD_ACCOUNT_ID",
         "hubspot": "HUBSPOT_PORTAL_ID",
+        "gtm": "GTM_CONTAINER_ID",
     }
     env_key = id_vars.get(channel)
     if env_key and account_id:
@@ -2300,21 +2387,20 @@ async def rastreamento_deploy(request: Request):
     """Deploys all tracking tags, triggers and variables to GTM via API, then publishes."""
     _apply_env_overrides()
     data = await request.json()
-    product      = data.get("product", "")
+    main_url     = data.get("main_url", "").strip()
+    thankyou_url = data.get("thankyou_url", "").strip()
     workspace_id = data.get("workspace_id", "1")
     publish      = data.get("publish", True)
 
-    env      = _get_env()
-    accounts = _load_accounts()
-    produto  = next((p for p in accounts if p["nome"] == product), None)
-    r        = produto.get("rastreamento", {}) if produto else {}
-    contas   = produto.get("contas", {})       if produto else {}
-
-    ga4_id       = r.get("ga4_measurement_id")                   or env.get("GA4_MEASUREMENT_ID", "")
-    meta_pixel   = contas.get("meta",{}).get("pixel_id")         or env.get("META_PIXEL_ID", "")
-    li_partner   = contas.get("linkedin",{}).get("partner_id")   or env.get("LINKEDIN_PARTNER_ID", "")
-    tiktok_pixel = contas.get("tiktok",{}).get("pixel_id")       or env.get("TIKTOK_PIXEL_ID", "")
+    env = _get_env()
+    ga4_id       = env.get("GA4_MEASUREMENT_ID", "")
+    meta_pixel   = env.get("META_PIXEL_ID", "")
+    li_partner   = env.get("LINKEDIN_PARTNER_ID", "")
+    tiktok_pixel = env.get("TIKTOK_PIXEL_ID", "")
     hs_portal    = env.get("HUBSPOT_PORTAL_ID", "")
+
+    if not thankyou_url:
+        return JSONResponse({"error": "Informe a URL da página de obrigado.", "ok": False}, status_code=400)
 
     try:
         sys.path.insert(0, str(ROOT / "tracking"))
@@ -2323,12 +2409,13 @@ async def rastreamento_deploy(request: Request):
             ga4_id=ga4_id, meta_pixel=meta_pixel, li_partner=li_partner,
             tiktok_pixel=tiktok_pixel, hs_portal_id=hs_portal,
             workspace_id=workspace_id,
+            main_url=main_url, thankyou_url=thankyou_url,
         )
         if publish:
             pub = publish_workspace(workspace_id=workspace_id, note="Deploy via IXCTraffic")
             result["published"] = True
             result["version_id"] = pub.get("version_id")
-            result["log"].append(f"✓ Container GTM publicado (versão {pub.get('version_id')})")
+            result["log"].append(f"✓ Container GTM publicado — versão {pub.get('version_id')}")
         return result
     except EnvironmentError as e:
         return JSONResponse({"error": str(e), "ok": False}, status_code=400)
@@ -2420,12 +2507,14 @@ async def login_post(
             "email": email,
         }, status_code=401)
     response = RedirectResponse(next if next.startswith("/") else "/", status_code=302)
+    _is_https = (os.getenv("APP_BASE_URL", "").startswith("https://")
+                 or request.url.scheme == "https")
     response.set_cookie(
         "ixc_session", token,
-        max_age=60 * 60 * 24 * 30,  # 30 dias
+        max_age=60 * 60 * 24 * 30,
         httponly=True,
         samesite="lax",
-        secure=False,  # True em produção HTTPS
+        secure=_is_https,
     )
     return response
 
@@ -2474,8 +2563,10 @@ async def setup_post(
         }, status_code=500)
     token = _auth.login(email, password)
     response = RedirectResponse("/", status_code=302)
+    _is_https = (os.getenv("APP_BASE_URL", "").startswith("https://")
+                 or request.url.scheme == "https")
     response.set_cookie("ixc_session", token, max_age=60*60*24*30,
-                        httponly=True, samesite="lax", secure=False)
+                        httponly=True, samesite="lax", secure=_is_https)
     return response
 
 

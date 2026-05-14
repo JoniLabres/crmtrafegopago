@@ -34,27 +34,90 @@ REQUIRED_TAGS = [
 ]
 
 
+_GTM_SCOPES = [
+    "https://www.googleapis.com/auth/tagmanager.edit.containers",
+    "https://www.googleapis.com/auth/tagmanager.publish",
+    "https://www.googleapis.com/auth/tagmanager.readonly",
+]
+
+
 def _get_service():
     from googleapiclient.discovery import build
-    from google.oauth2 import service_account
 
-    creds_path = os.getenv("GTM_CREDENTIALS_JSON", "")
-    if not creds_path or not Path(creds_path).exists():
-        raise EnvironmentError(
-            "GTM_CREDENTIALS_JSON não configurado ou arquivo não encontrado"
+    # OAuth refresh token (preferred — user-authorized via Conexões)
+    refresh_token = os.getenv("GTM_OAUTH_REFRESH_TOKEN", "")
+    client_id     = os.getenv("GTM_CLIENT_ID", "")
+    client_secret = os.getenv("GTM_CLIENT_SECRET", "")
+
+    if refresh_token and client_id and client_secret:
+        from google.oauth2.credentials import Credentials
+        from google.auth.transport.requests import Request as GRequest
+        creds = Credentials(
+            token=None,
+            refresh_token=refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=client_id,
+            client_secret=client_secret,
+            scopes=_GTM_SCOPES,
         )
+        creds.refresh(GRequest())
+        return build("tagmanager", "v2", credentials=creds)
 
-    scopes = ["https://www.googleapis.com/auth/tagmanager.edit.containers"]
-    creds = service_account.Credentials.from_service_account_file(creds_path, scopes=scopes)
-    return build("tagmanager", "v2", credentials=creds)
+    # Service account fallback
+    creds_path = os.getenv("GTM_CREDENTIALS_JSON", "")
+    if creds_path and Path(creds_path).exists():
+        from google.oauth2 import service_account
+        creds = service_account.Credentials.from_service_account_file(
+            creds_path, scopes=_GTM_SCOPES
+        )
+        return build("tagmanager", "v2", credentials=creds)
+
+    raise EnvironmentError(
+        "GTM não autenticado. Conecte via Conexões → GTM ou configure GTM_CREDENTIALS_JSON."
+    )
 
 
 def _container_path() -> str:
-    account_id = os.getenv("GTM_ACCOUNT_ID", "")
+    account_id   = os.getenv("GTM_ACCOUNT_ID", "")
     container_id = os.getenv("GTM_CONTAINER_ID", "")
-    if not account_id or not container_id:
-        raise EnvironmentError("GTM_ACCOUNT_ID e GTM_CONTAINER_ID devem ser configurados")
-    return f"accounts/{account_id}/containers/{container_id}"
+    public_id    = os.getenv("GTM_PUBLIC_ID", "")
+
+    if not account_id:
+        raise EnvironmentError("GTM_ACCOUNT_ID não configurado.")
+
+    # If numeric container ID already known, use it directly
+    if container_id and container_id.isdigit():
+        return f"accounts/{account_id}/containers/{container_id}"
+
+    # Resolve numeric ID from public ID (GTM-XXXXXX)
+    if public_id:
+        try:
+            service = _get_service()
+            resp = service.accounts().containers().list(
+                parent=f"accounts/{account_id}"
+            ).execute()
+            for c in resp.get("container", []):
+                if c.get("publicId") == public_id:
+                    numeric = c["containerId"]
+                    os.environ["GTM_CONTAINER_ID"] = numeric
+                    try:
+                        from dotenv import set_key
+                        env_path = Path(__file__).parent.parent / ".env"
+                        if env_path.exists():
+                            set_key(str(env_path), "GTM_CONTAINER_ID", numeric)
+                    except Exception:
+                        pass
+                    logger.info("GTM Container ID resolvido: %s → %s", public_id, numeric)
+                    return f"accounts/{account_id}/containers/{numeric}"
+            raise EnvironmentError(f"Container {public_id} não encontrado na conta {account_id}.")
+        except EnvironmentError:
+            raise
+        except Exception as exc:
+            raise EnvironmentError(f"Erro ao resolver container ID: {exc}") from exc
+
+    raise EnvironmentError(
+        "Configure GTM_CONTAINER_ID (numérico) ou GTM_PUBLIC_ID (ex: GTM-M3HZ5VQR)."
+    )
 
 
 def list_workspace(workspace_id: str = "1") -> dict:
@@ -298,6 +361,36 @@ def _custom_event_trigger(name: str, event_name: str) -> dict:
     }
 
 
+def _thankyou_trigger(thankyou_path: str) -> dict:
+    """Cria trigger PAGEVIEW que dispara quando a URL contém o path da página de obrigado."""
+    return {
+        "name": "PV - Página de Obrigado",
+        "type": "PAGEVIEW",
+        "filter": [{
+            "type": "CONTAINS",
+            "parameter": [
+                {"type": "TEMPLATE", "key": "arg0", "value": "{{Page URL}}"},
+                {"type": "TEMPLATE", "key": "arg1", "value": thankyou_path},
+            ],
+        }],
+    }
+
+
+def _extract_path(url: str) -> str:
+    """Extrai somente o path de uma URL. Ex: https://site.com/obrigado → /obrigado"""
+    url = url.strip().rstrip("/")
+    if not url:
+        return ""
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        path = parsed.path or url
+        # Remove trailing query string / fragment
+        return path if path else url
+    except Exception:
+        return url
+
+
 def deploy_all_tags(
     ga4_id: str = "",
     meta_pixel: str = "",
@@ -305,6 +398,8 @@ def deploy_all_tags(
     tiktok_pixel: str = "",
     hs_portal_id: str = "",
     workspace_id: str = "1",
+    main_url: str = "",
+    thankyou_url: str = "",
 ) -> dict:
     """Creates/updates all tracking tags, triggers and variables in GTM via API.
     Returns a log of every action taken."""
@@ -380,11 +475,21 @@ def deploy_all_tags(
         })
 
     # ── 2. Triggers ──────────────────────────────────────────────────────────
-    lead_tid   = _upsert_trigger(_custom_event_trigger("CE - generate_lead",  "generate_lead"))
+    # Trigger de conversão: pageview na página de obrigado (preferido)
+    # ou fallback para evento generate_lead se URL não informada
+    thankyou_path = _extract_path(thankyou_url)
+    if thankyou_path:
+        conv_tid = _upsert_trigger(_thankyou_trigger(thankyou_path))
+        log.append(f"✓ Trigger de conversão: pageview em '{thankyou_path}'")
+    else:
+        conv_tid = _upsert_trigger(_custom_event_trigger("CE - generate_lead", "generate_lead"))
+        log.append("  ℹ Trigger de conversão: evento generate_lead (sem URL de obrigado)")
+
     scroll_tid = _upsert_trigger(_custom_event_trigger("CE - scroll_depth",   "scroll_depth"))
     cta_tid    = _upsert_trigger(_custom_event_trigger("CE - cta_click",      "cta_click"))
     exit_tid   = _upsert_trigger(_custom_event_trigger("CE - exit_intent",    "exit_intent"))
     time_tid   = _upsert_trigger(_custom_event_trigger("CE - time_on_page",   "time_on_page"))
+    lead_tid   = conv_tid  # alias para compatibilidade das tags abaixo
 
     # ── 3. Tags base (sempre presentes) ──────────────────────────────────────
     _upsert_tag({

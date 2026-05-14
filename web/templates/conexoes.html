@@ -256,7 +256,9 @@
       </div>
       <div class="conn-body">
         <div style="background:rgba(255,122,0,0.07);border:1px solid rgba(255,122,0,0.2);border-radius:8px;padding:0.75rem 1rem;font-size:0.8rem;line-height:1.5;color:var(--muted);">
-          <strong style="color:var(--text);">OAuth 2.0 recomendado.</strong> Clique em <em>Conectar com HubSpot</em> para autorizar o acesso ao seu portal. É necessário ter um <strong>HubSpot App</strong> com <em>Client ID</em> e <em>Client Secret</em> configurados abaixo.
+          <strong style="color:var(--text);">OAuth 2.0 recomendado.</strong> No <a href="https://developers.hubspot.com" target="_blank" style="color:var(--primary);">HubSpot Developer Portal</a>, crie um App Público, adicione em <em>Redirect URLs</em>:<br>
+          <code style="font-size:0.72rem;background:rgba(0,0,0,.3);padding:0.1rem 0.4rem;border-radius:4px;">{{ (env.APP_BASE_URL or (request.url.scheme + '://' + request.url.netloc)) }}/auth/callback/hubspot</code><br>
+          E cole abaixo o <em>Client ID</em> e <em>Client Secret</em> do App.
         </div>
         <a href="/auth/connect/hubspot" class="btn btn-oauth" style="background:#ff7a00;color:#fff;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:0.5rem;padding:0.55rem 1rem;border-radius:8px;font-size:0.9rem;font-weight:600;">
           <svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px;"><path d="M18.164 7.93V5.773a1.56 1.56 0 00.898-1.408V4.32A1.56 1.56 0 0017.504 2.76h-.047a1.56 1.56 0 00-1.558 1.56v.046a1.56 1.56 0 00.898 1.408V7.93a4.43 4.43 0 00-2.1.92L8.207 4.366a1.56 1.56 0 10-.797 1.377l6.344 4.418a4.437 4.437 0 00-.576 2.167 4.437 4.437 0 004.437 4.437 4.437 4.437 0 004.437-4.437 4.437 4.437 0 00-3.888-4.398zM5.625 13.5a1.125 1.125 0 110-2.25 1.125 1.125 0 010 2.25zm11.832 2.813a2.25 2.25 0 110-4.5 2.25 2.25 0 010 4.5z"/></svg>
@@ -427,34 +429,84 @@
         <div class="conn-icon" style="background:rgba(66,133,244,0.15);">🏷️</div>
         <div>
           <div class="conn-name">Google Tag Manager</div>
-          <div class="conn-status {{ 'ok' if env.GTM_ACCOUNT_ID else 'na' }}">
-            {{ '✓ Configurado' if env.GTM_ACCOUNT_ID else '○ Não configurado' }}
+          <div class="conn-status {{ 'ok' if env.GTM_OAUTH_REFRESH_TOKEN else 'na' }}">
+            {% if env.GTM_OAUTH_REFRESH_TOKEN %}
+              ✓ Conectado{% if env.GTM_PUBLIC_ID %} · {{ env.GTM_PUBLIC_ID }}{% endif %}
+            {% else %}
+              ○ Não conectado
+            {% endif %}
           </div>
         </div>
       </div>
-      <form class="conn-body" onsubmit="saveEnv(event, 'gtm')">
-        <div class="form-group">
-          <label>Account ID (numérico)</label>
-          <input name="GTM_ACCOUNT_ID" class="input input-dark" placeholder="123456789" value="{{ env.GTM_ACCOUNT_ID or '' }}">
-        </div>
-        <div class="form-group">
-          <label>Container ID (numérico)</label>
-          <input name="GTM_CONTAINER_ID" class="input input-dark" placeholder="987654321" value="{{ env.GTM_CONTAINER_ID or '' }}">
-        </div>
-        <div class="form-group">
-          <label>Public ID</label>
-          <input name="GTM_PUBLIC_ID" class="input input-dark" placeholder="GTM-XXXXXXX" value="{{ env.GTM_PUBLIC_ID or '' }}">
-        </div>
-        <div class="form-group">
-          <label>Credentials JSON (Service Account)</label>
-          <input name="GTM_CREDENTIALS_JSON" class="input input-dark" placeholder="/caminho/para/credentials.json" value="{{ env.GTM_CREDENTIALS_JSON or '' }}">
-        </div>
-        <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
-          <button type="submit" class="btn btn-primary btn-sm">Salvar</button>
-          <button type="button" class="btn btn-outline btn-sm" onclick="gtmVerify()">Verificar setup</button>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="gtmSnippet()">Ver snippet</button>
-        </div>
-      </form>
+      <div class="conn-body">
+
+        <!-- Passo a passo OAuth Playground -->
+        <details {% if not env.GTM_OAUTH_REFRESH_TOKEN %}open{% endif %} style="margin-bottom:1rem;">
+          <summary style="font-size:0.82rem;font-weight:600;color:var(--primary);cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:0.4rem;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Como obter o Refresh Token (OAuth Playground)
+          </summary>
+          <div style="margin-top:0.75rem;background:rgba(0,0,0,.2);border:1px solid var(--border);border-radius:8px;padding:0.9rem 1rem;font-size:0.78rem;line-height:1.9;color:var(--muted);">
+            <ol style="margin:0;padding-left:1.2rem;display:flex;flex-direction:column;gap:0.3rem;">
+              <li>Acesse <a href="https://developers.google.com/oauthplayground/" target="_blank" style="color:var(--primary);">developers.google.com/oauthplayground</a></li>
+              <li>Clique no ícone <strong style="color:var(--text);">⚙ (engrenagem)</strong> no canto superior direito</li>
+              <li>Marque <strong style="color:var(--text);">"Use your own OAuth credentials"</strong></li>
+              <li>Preencha com seu <strong style="color:var(--text);">Client ID</strong> e <strong style="color:var(--text);">Client Secret</strong> (campos abaixo)</li>
+              <li>No painel esquerdo, localize <strong style="color:var(--text);">Tag Manager API v2</strong> e selecione todos os escopos</li>
+              <li>Clique em <strong style="color:var(--text);">"Authorize APIs"</strong> e faça login com sua conta Google</li>
+              <li>Clique em <strong style="color:var(--text);">"Exchange authorization code for tokens"</strong></li>
+              <li>Copie o <strong style="color:#a3ff00;">Refresh token</strong> e cole no campo abaixo</li>
+            </ol>
+          </div>
+        </details>
+
+        <!-- Form de credenciais -->
+        <form onsubmit="saveEnv(event,'gtm')" style="display:flex;flex-direction:column;gap:0.75rem;">
+          <div class="form-group" style="margin:0;">
+            <label>Refresh Token <span style="color:var(--danger);">*</span></label>
+            <input name="GTM_OAUTH_REFRESH_TOKEN" class="input input-dark"
+                   placeholder="Cole aqui o Refresh Token do OAuth Playground"
+                   value="{{ '••••••••' if env.GTM_OAUTH_REFRESH_TOKEN else '' }}">
+            {% if env.GTM_OAUTH_REFRESH_TOKEN %}
+            <div style="font-size:0.72rem;color:#00c864;margin-top:0.2rem;">✓ Token configurado</div>
+            {% endif %}
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+            <div class="form-group" style="margin:0;">
+              <label>Client ID</label>
+              <input name="GTM_CLIENT_ID" class="input input-dark"
+                     placeholder="xxxxxx.apps.googleusercontent.com"
+                     value="{{ env.GTM_CLIENT_ID or '' }}">
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label>Client Secret</label>
+              <input name="GTM_CLIENT_SECRET" class="input input-dark" type="password"
+                     placeholder="GOCSPX-xxxxxxxx"
+                     value="{{ '••••••••' if env.GTM_CLIENT_SECRET else '' }}">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+            <div class="form-group" style="margin:0;">
+              <label>Account ID</label>
+              <input name="GTM_ACCOUNT_ID" class="input input-dark"
+                     placeholder="6337938328"
+                     value="{{ env.GTM_ACCOUNT_ID or '' }}">
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label>Container Public ID</label>
+              <input name="GTM_PUBLIC_ID" class="input input-dark"
+                     placeholder="GTM-XXXXXXX"
+                     value="{{ env.GTM_PUBLIC_ID or '' }}">
+            </div>
+          </div>
+          <div style="display:flex;gap:0.5rem;">
+            <button type="submit" class="btn btn-primary btn-sm" style="flex:1;">Salvar</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="gtmVerify()">Verificar conexão</button>
+          </div>
+          <div id="gtm-verify-out" style="display:none;font-size:0.78rem;padding:0.5rem 0.75rem;border-radius:6px;background:rgba(0,0,0,.2);border:1px solid var(--border);"></div>
+        </form>
+
+      </div>
     </div>
 
   </div>
@@ -838,18 +890,28 @@ async function ga4Report() {
 }
 
 async function gtmVerify() {
-  const out = document.getElementById('tracking-output');
-  out.style.display = 'block'; out.textContent = 'Verificando setup GTM...';
+  const out = document.getElementById('gtm-verify-out');
+  out.style.display = 'block';
+  out.style.color = 'var(--muted)';
+  out.textContent = 'Verificando conexão GTM...';
   try {
     const r = await fetch('/api/gtm/verify');
     const d = await r.json();
-    if(d.error) { out.textContent = 'Erro GTM: ' + d.error; return; }
-    let txt = `GTM — Status: ${d.status}\nVariáveis presentes: ${d.variaveis_presentes}\nTags presentes: ${d.tags_presentes}`;
-    if(d.variaveis_faltando.length) txt += `\nVariáveis faltando: ${d.variaveis_faltando.join(', ')}`;
-    if(d.tags_faltando.length) txt += `\nTags faltando: ${d.tags_faltando.join(', ')}`;
+    if (d.error) {
+      out.style.color = '#ff6b6b';
+      out.textContent = '✗ ' + d.error;
+      return;
+    }
+    const ok = d.status === 'ok';
+    out.style.color = ok ? '#00c864' : '#ffd166';
+    let txt = (ok ? '✓ ' : '⚠ ') + `Status: ${d.status} · ${d.variaveis_presentes} variáveis · ${d.tags_presentes} tags`;
+    if (d.variaveis_faltando?.length) txt += `\nFaltando: ${d.variaveis_faltando.join(', ')}`;
     out.textContent = txt;
-    showToast('GTM: ' + d.status);
-  } catch(e) { out.textContent = 'Erro: ' + e.message; }
+    showToast('GTM: ' + d.status, ok ? 'ok' : 'warn');
+  } catch(e) {
+    out.style.color = '#ff6b6b';
+    out.textContent = '✗ Erro de rede: ' + e.message;
+  }
 }
 
 async function gtmSnippet() {

@@ -4,578 +4,355 @@
 
 {% block head %}
 <style>
-/* ── Wizard steps ────────────────────────────────────────────────────── */
-.wizard { display:flex; flex-direction:column; gap:1rem; max-width:860px; margin:0 auto; }
+/* ── Layout ───────────────────────────────────────────────────────────── */
+.track-wrap { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.25rem; }
 
-.step {
-  background:var(--surface); border:1px solid var(--border); border-radius:14px;
-  overflow:hidden; transition:border-color .2s;
+/* ── Status bar ───────────────────────────────────────────────────────── */
+.status-bar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
-.step.done  { border-color:rgba(0,200,100,.35); }
-.step.error { border-color:rgba(255,68,68,.35); }
-.step.active{ border-color:rgba(163,255,0,.4); box-shadow:0 0 0 3px rgba(163,255,0,.07); }
-
-.step-head {
-  display:flex; align-items:center; gap:1rem;
-  padding:1.1rem 1.3rem; cursor:default;
+.status-icon {
+  width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 1rem;
 }
-.step-num {
-  width:32px; height:32px; border-radius:50%; flex-shrink:0;
-  display:flex; align-items:center; justify-content:center;
-  font-size:0.82rem; font-weight:800;
-  background:rgba(255,255,255,.08); color:var(--muted); border:2px solid var(--border);
-  transition:all .2s;
+.status-icon.ok  { background: rgba(0,200,100,.15); }
+.status-icon.err { background: rgba(255,68,68,.12); }
+.status-icon.na  { background: rgba(255,255,255,.06); }
+.status-text h4  { font-size: 0.9rem; font-weight: 700; margin: 0 0 2px; }
+.status-text p   { font-size: 0.78rem; color: var(--muted); margin: 0; }
+
+.pixel-chips { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-left: auto; }
+.chip {
+  font-size: 0.7rem; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: 20px;
+  white-space: nowrap;
 }
-.step.done  .step-num { background:rgba(0,200,100,.2);  color:#00c864; border-color:rgba(0,200,100,.4); }
-.step.error .step-num { background:rgba(255,68,68,.15); color:#ff6b6b; border-color:rgba(255,68,68,.3); }
-.step.active .step-num{ background:rgba(163,255,0,.15); color:var(--primary); border-color:rgba(163,255,0,.5); }
+.chip.ok  { background: rgba(0,200,100,.15); color: #00c864; border: 1px solid rgba(0,200,100,.3); }
+.chip.na  { background: rgba(255,255,255,.06); color: var(--muted); border: 1px solid var(--border); }
 
-.step-info { flex:1; }
-.step-title{ font-weight:700; font-size:0.95rem; }
-.step-sub  { font-size:0.78rem; color:var(--muted); margin-top:2px; }
-.step-badge{
-  font-size:0.7rem; font-weight:700; padding:0.2rem 0.6rem; border-radius:20px;
+/* ── Form card ────────────────────────────────────────────────────────── */
+.form-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
 }
-.sb-done  { background:rgba(0,200,100,.15);  color:#00c864; }
-.sb-pend  { background:rgba(255,255,255,.07); color:var(--muted); }
-.sb-active{ background:rgba(163,255,0,.12);  color:var(--primary); }
-.sb-err   { background:rgba(255,68,68,.12);  color:#ff6b6b; }
+.form-card h3 { font-size: 1rem; font-weight: 700; margin: 0 0 0.25rem; }
+.form-card .desc { font-size: 0.82rem; color: var(--muted); margin: 0 0 1.25rem; line-height: 1.5; }
 
-.step-body { padding:0 1.3rem 1.3rem; border-top:1px solid var(--border); }
+.url-group { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem; }
+.url-row { display: flex; flex-direction: column; gap: 0.3rem; }
+.url-row label {
+  font-size: 0.78rem; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.url-row label span { color: var(--danger); }
+.url-input {
+  width: 100%; background: rgba(0,0,0,.25); border: 1px solid var(--border);
+  border-radius: 8px; padding: 0.65rem 1rem; font-size: 0.9rem; color: var(--text);
+  font-family: 'JetBrains Mono','Fira Code',monospace;
+  transition: border-color .15s; outline: none;
+}
+.url-input:focus { border-color: rgba(163,255,0,.5); }
+.url-input::placeholder { color: var(--muted); font-family: inherit; }
+.url-hint { font-size: 0.72rem; color: var(--muted); margin-top: 0.15rem; }
 
-/* ── Code block ──────────────────────────────────────────────────────── */
-.code-wrap { position:relative; margin:0.75rem 0; }
-pre.snip {
-  background:rgba(0,0,0,.3); border:1px solid var(--border); border-radius:8px;
-  padding:0.9rem 1rem; font-family:'JetBrains Mono','Fira Code',monospace;
-  font-size:0.73rem; line-height:1.6; color:#c9d1d9; overflow-x:auto;
-  white-space:pre; margin:0;
+.deploy-btn {
+  width: 100%; padding: 0.75rem; border: none; border-radius: 10px;
+  background: var(--primary); color: #0a0a0a; font-size: 0.95rem; font-weight: 800;
+  font-family: inherit; cursor: pointer; transition: opacity .15s; letter-spacing: 0.02em;
+}
+.deploy-btn:hover   { opacity: .9; }
+.deploy-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ── Deploy log ────────────────────────────────────────────────────────── */
+.log-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  display: none;
+}
+.log-card.visible { display: block; }
+.log-head {
+  padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 0.75rem;
+}
+.log-head h4 { font-size: 0.9rem; font-weight: 700; margin: 0; flex: 1; }
+#log-status-badge {
+  font-size: 0.7rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 20px;
+}
+#log-body {
+  padding: 1rem 1.25rem;
+  font-family: 'JetBrains Mono','Fira Code',monospace;
+  font-size: 0.75rem; line-height: 1.9; color: #c9d1d9;
+  max-height: 360px; overflow-y: auto;
+  background: rgba(0,0,0,.25);
+}
+.log-ok   { color: #00c864; }
+.log-upd  { color: #6fa8ff; }
+.log-info { color: var(--muted); }
+.log-err  { color: #ff6b6b; }
+.log-sum  { color: var(--primary); font-weight: 700; border-top: 1px solid var(--border); padding-top: 0.5rem; margin-top: 0.25rem; }
+.log-pub  { color: #a3ff00; font-weight: 700; }
+
+/* ── Snippet card ──────────────────────────────────────────────────────── */
+.snip-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.snip-head {
+  padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.snip-head h4 { font-size: 0.9rem; font-weight: 700; margin: 0; }
+.snip-desc { font-size: 0.78rem; color: var(--muted); padding: 0.65rem 1.25rem 0; }
+.snip-wrap { position: relative; margin: 0.75rem 1.25rem 1.25rem; }
+pre.snip-code {
+  background: rgba(0,0,0,.3); border: 1px solid var(--border); border-radius: 8px;
+  padding: 0.9rem 1rem; font-family: 'JetBrains Mono','Fira Code',monospace;
+  font-size: 0.72rem; line-height: 1.6; color: #c9d1d9;
+  overflow-x: auto; white-space: pre; margin: 0;
 }
 .copy-btn {
-  position:absolute; top:0.5rem; right:0.5rem;
-  background:rgba(163,255,0,.12); color:var(--primary); border:1px solid rgba(163,255,0,.3);
-  border-radius:6px; padding:0.2rem 0.6rem; font-size:0.7rem; font-weight:700;
-  cursor:pointer; transition:all .15s;
+  position: absolute; top: 0.5rem; right: 0.5rem;
+  background: rgba(163,255,0,.12); color: var(--primary); border: 1px solid rgba(163,255,0,.3);
+  border-radius: 6px; padding: 0.2rem 0.6rem; font-size: 0.7rem; font-weight: 700;
+  cursor: pointer; transition: all .15s;
 }
-.copy-btn:hover   { background:rgba(163,255,0,.22); }
-.copy-btn.copied  { background:rgba(0,200,100,.2); color:#00c864; border-color:rgba(0,200,100,.4); }
+.copy-btn:hover  { background: rgba(163,255,0,.22); }
+.copy-btn.copied { background: rgba(0,200,100,.2); color: #00c864; border-color: rgba(0,200,100,.4); }
 
-/* ── Deploy log ──────────────────────────────────────────────────────── */
-#deploy-log {
-  background:rgba(0,0,0,.3); border:1px solid var(--border); border-radius:8px;
-  padding:0.9rem 1rem; font-family:monospace; font-size:0.75rem; line-height:1.8;
-  min-height:60px; max-height:320px; overflow-y:auto; display:none;
+/* ── Spinner ───────────────────────────────────────────────────────────── */
+.spin {
+  display: inline-block; width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid rgba(10,10,10,.3); border-top-color: #0a0a0a;
+  animation: spin .7s linear infinite; vertical-align: middle; margin-right: 6px;
 }
-.log-ok   { color:#00c864; }
-.log-upd  { color:#6fa8ff; }
-.log-info { color:var(--muted); }
-.log-err  { color:#ff6b6b; }
-.log-sum  { color:var(--primary); font-weight:700; margin-top:0.5rem; padding-top:0.5rem; border-top:1px solid var(--border); }
-
-/* ── Mode switch ─────────────────────────────────────────────────────── */
-.mode-switch {
-  display:flex; gap:0.5rem; background:rgba(255,255,255,.05);
-  border:1px solid var(--border); border-radius:10px; padding:0.3rem; margin-bottom:1.5rem;
-}
-.mode-btn {
-  flex:1; padding:0.55rem; border:none; border-radius:7px;
-  font-size:0.82rem; font-weight:600; cursor:pointer; transition:all .15s;
-  background:none; color:var(--muted);
-}
-.mode-btn.active {
-  background:rgba(163,255,0,.12); color:var(--primary);
-  box-shadow:inset 0 0 0 1px rgba(163,255,0,.3);
-}
-
-/* ── Status pill bar ─────────────────────────────────────────────────── */
-.pill-bar { display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:1.5rem; }
-.pill {
-  display:flex; align-items:center; gap:0.35rem;
-  background:var(--surface); border:1px solid var(--border);
-  border-radius:20px; padding:0.3rem 0.75rem; font-size:0.73rem;
-}
-.pill.ok    { border-color:rgba(0,200,100,.35); }
-.pill.pend  { opacity:.55; }
-.pill-dot   { font-size:0.55rem; }
-.pill.ok  .pill-dot { color:#00c864; }
-.pill.pend .pill-dot{ color:var(--muted); }
-
-/* ── Checklist inline ────────────────────────────────────────────────── */
-.check-row { display:flex; align-items:center; gap:0.6rem; padding:0.35rem 0; font-size:0.82rem; }
-.check-row .ci { font-size:0.9rem; width:18px; text-align:center; }
-.ci-ok   { color:#00c864; }
-.ci-err  { color:#ff6b6b; }
-.ci-spin { color:var(--primary); animation:spin .8s linear infinite; display:inline-block; }
-@keyframes spin { to { transform:rotate(360deg); } }
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>
 {% endblock %}
 
 {% block content %}
+<div class="track-wrap">
 
-{# ── Resolve IDs ── #}
-{% set ap = namespace(gtm_pub='', gtm_acc='', gtm_ctn='', gtm_cred='', ga4='', meta='', li='', tt='', hs='') %}
-{% for prod in accounts %}
-  {% if prod.nome == active_product %}
-    {% set ap.gtm_pub = prod.rastreamento.gtm_public_id    or env.GTM_PUBLIC_ID      or '' %}
-    {% set ap.ga4     = prod.rastreamento.ga4_measurement_id or env.GA4_MEASUREMENT_ID or '' %}
-    {% set ap.meta    = prod.contas.meta.pixel_id           or env.META_PIXEL_ID      or '' %}
-    {% set ap.li      = prod.contas.linkedin.partner_id     or env.LINKEDIN_PARTNER_ID or '' %}
-    {% set ap.tt      = prod.contas.tiktok.pixel_id         or env.TIKTOK_PIXEL_ID    or '' %}
-  {% endif %}
-{% endfor %}
-{% if not ap.gtm_pub %} {% set ap.gtm_pub = env.GTM_PUBLIC_ID       or '' %} {% endif %}
-{% if not ap.ga4     %} {% set ap.ga4     = env.GA4_MEASUREMENT_ID   or '' %} {% endif %}
-{% if not ap.meta    %} {% set ap.meta    = env.META_PIXEL_ID         or '' %} {% endif %}
-{% if not ap.li      %} {% set ap.li      = env.LINKEDIN_PARTNER_ID   or '' %} {% endif %}
-{% if not ap.tt      %} {% set ap.tt      = env.TIKTOK_PIXEL_ID       or '' %} {% endif %}
-{% set ap.gtm_acc  = env.GTM_ACCOUNT_ID       or '' %}
-{% set ap.gtm_ctn  = env.GTM_CONTAINER_ID     or '' %}
-{% set ap.gtm_cred = env.GTM_CREDENTIALS_JSON or '' %}
-{% set ap.hs       = env.HUBSPOT_PORTAL_ID    or '' %}
-
-{% set has_gtm_api = ap.gtm_acc and ap.gtm_ctn and ap.gtm_cred %}
-{% set has_any_pixel = ap.ga4 or ap.meta or ap.li or ap.tt or ap.hs %}
-
-<div class="page-header" style="max-width:860px;margin:0 auto 1.5rem;">
-  <h1 class="page-title">Rastreamento</h1>
-  <p class="page-desc">Configure o tracking completo da sua landing page em minutos.</p>
-</div>
-
-{# ── Status bar ── #}
-<div class="pill-bar" style="max-width:860px;margin:0 auto 1.5rem;">
-  {% for label, val in [('GTM',ap.gtm_pub),('GA4',ap.ga4),('Meta Pixel',ap.meta),('LinkedIn',ap.li),('TikTok',ap.tt),('HubSpot',ap.hs)] %}
-  <div class="pill {{ 'ok' if val else 'pend' }}">
-    <span class="pill-dot">{{ '●' if val else '○' }}</span>
-    <span style="font-weight:600;">{{ label }}</span>
-    {% if val %}<span style="color:var(--muted);font-family:monospace;">{{ val[:14] }}{% if val|length > 14 %}…{% endif %}</span>{% endif %}
-  </div>
-  {% endfor %}
-  {% if not has_any_pixel %}
-  <a href="/conexoes" style="display:flex;align-items:center;gap:0.4rem;background:rgba(255,180,0,.1);border:1px solid rgba(255,180,0,.35);border-radius:20px;padding:0.3rem 0.75rem;font-size:0.73rem;color:#ffb400;text-decoration:none;font-weight:600;">
-    ⚠ Configure os IDs em Conexões primeiro →
-  </a>
-  {% endif %}
-</div>
-
-{# ── Mode switch ── #}
-<div class="mode-switch" style="max-width:860px;margin:0 auto 1.5rem;">
-  <button class="mode-btn active" id="mode-gtm" onclick="setMode('gtm',this)">
-    🏷 Com GTM <span style="font-size:0.7rem;opacity:.7;">(recomendado)</span>
-  </button>
-  <button class="mode-btn" id="mode-nogtm" onclick="setMode('nogtm',this)">
-    ⚡ Sem GTM — Mega Snippet
-  </button>
-</div>
-
-{# ══════════════════════════════════════════
-   MODO GTM
-══════════════════════════════════════════ #}
-<div id="wizard-gtm" class="wizard">
-
-  {# STEP 1 — Configure os IDs #}
-  <div class="step {{ 'done' if has_any_pixel else 'active' }}" id="step-ids">
-    <div class="step-head">
-      <div class="step-num">{{ '✓' if has_any_pixel else '1' }}</div>
-      <div class="step-info">
-        <div class="step-title">Configure os IDs das plataformas</div>
-        <div class="step-sub">Pixel IDs, GA4, GTM — precisam estar em Conexões antes de continuar.</div>
-      </div>
-      <span class="step-badge {{ 'sb-done' if has_any_pixel else 'sb-active' }}">
-        {{ 'Completo' if has_any_pixel else 'Necessário' }}
-      </span>
-    </div>
-    {% if not has_any_pixel %}
-    <div class="step-body">
-      <p style="font-size:0.85rem;color:var(--muted);margin:0.75rem 0;">
-        Nenhum ID configurado ainda. Vá em Conexões e preencha os Pixel IDs, GA4 e GTM do produto ativo.
-      </p>
-      <a href="/conexoes" class="btn btn-primary">Ir para Conexões →</a>
+  <!-- ── 1. Status GTM ──────────────────────────────────────────────────── -->
+  <div class="status-bar">
+    {% if env.GTM_OAUTH_REFRESH_TOKEN %}
+    <div class="status-icon ok">✓</div>
+    <div class="status-text">
+      <h4>GTM conectado — {{ env.GTM_PUBLIC_ID or 'container configurado' }}</h4>
+      <p>Pronto para fazer o deploy das tags de rastreamento</p>
     </div>
     {% else %}
-    <div class="step-body">
-      <div style="display:flex;flex-wrap:wrap;gap:0.5rem;padding-top:0.25rem;">
-        {% for label, val in [('GA4',ap.ga4),('Meta Pixel',ap.meta),('LinkedIn',ap.li),('TikTok',ap.tt),('HubSpot',ap.hs)] %}
-        {% if val %}
-        <div class="check-row"><span class="ci ci-ok">✓</span> <span>{{ label }}: <code style="font-size:0.78rem;">{{ val }}</code></span></div>
-        {% endif %}
-        {% endfor %}
-      </div>
-      <a href="/conexoes" class="btn btn-ghost btn-sm" style="margin-top:0.75rem;">Editar IDs →</a>
+    <div class="status-icon err">!</div>
+    <div class="status-text">
+      <h4>GTM não conectado</h4>
+      <p>Vá em <a href="/conexoes#rastreamento" style="color:var(--primary);">Conexões → Rastreamento</a> e conecte o Google Tag Manager primeiro</p>
     </div>
+    {% endif %}
+
+    <!-- Chips de pixels configurados -->
+    <div class="pixel-chips">
+      <span class="chip {{ 'ok' if env.GA4_MEASUREMENT_ID else 'na' }}" title="{{ env.GA4_MEASUREMENT_ID or 'não configurado' }}">
+        GA4{{ ' ✓' if env.GA4_MEASUREMENT_ID else '' }}
+      </span>
+      <span class="chip {{ 'ok' if env.META_PIXEL_ID else 'na' }}" title="{{ env.META_PIXEL_ID or 'não configurado' }}">
+        Meta{{ ' ✓' if env.META_PIXEL_ID else '' }}
+      </span>
+      <span class="chip {{ 'ok' if env.LINKEDIN_PARTNER_ID else 'na' }}" title="{{ env.LINKEDIN_PARTNER_ID or 'não configurado' }}">
+        LinkedIn{{ ' ✓' if env.LINKEDIN_PARTNER_ID else '' }}
+      </span>
+      <span class="chip {{ 'ok' if env.TIKTOK_PIXEL_ID else 'na' }}" title="{{ env.TIKTOK_PIXEL_ID or 'não configurado' }}">
+        TikTok{{ ' ✓' if env.TIKTOK_PIXEL_ID else '' }}
+      </span>
+    </div>
+  </div>
+
+  <!-- ── 2. Formulário de deploy ────────────────────────────────────────── -->
+  <div class="form-card">
+    <h3>Configurar rastreamento</h3>
+    <p class="desc">
+      Informe as duas URLs e clique em <strong>Configurar GTM</strong>. A ferramenta cria todas
+      as tags, variáveis e triggers automaticamente no seu container — incluindo o trigger de
+      conversão específico para a página de obrigado — e publica o container.
+    </p>
+
+    <div class="url-group">
+      <div class="url-row">
+        <label>URL da página principal</label>
+        <input id="main-url" class="url-input" type="url"
+               placeholder="https://seusite.com.br"
+               value="{{ env.APP_BASE_URL or '' }}">
+        <span class="url-hint">URL raiz do seu site / landing page.</span>
+      </div>
+
+      <div class="url-row">
+        <label>URL da página de obrigado <span>*</span></label>
+        <input id="thankyou-url" class="url-input" type="url"
+               placeholder="https://seusite.com.br/obrigado">
+        <span class="url-hint">
+          Página exibida após o formulário ser enviado. O trigger de conversão
+          (Lead, GA4, Pixel) dispara quando o visitante chegar nesta URL.
+        </span>
+      </div>
+    </div>
+
+    <button class="deploy-btn" id="deploy-btn" onclick="runDeploy()"
+            {% if not env.GTM_OAUTH_REFRESH_TOKEN %}disabled{% endif %}>
+      Configurar e publicar no GTM
+    </button>
+    {% if not env.GTM_OAUTH_REFRESH_TOKEN %}
+    <p style="font-size:0.78rem;color:var(--muted);text-align:center;margin-top:0.6rem;">
+      Conecte o GTM em <a href="/conexoes" style="color:var(--primary);">Conexões</a> para habilitar o deploy
+    </p>
     {% endif %}
   </div>
 
-  {# STEP 2 — Instale o GTM na landing page #}
-  <div class="step {{ 'active' if has_any_pixel else '' }}" id="step-install">
-    <div class="step-head">
-      <div class="step-num">2</div>
-      <div class="step-info">
-        <div class="step-title">Cole este snippet único no &lt;head&gt; da landing page</div>
-        <div class="step-sub">Só isso. Uma vez. Todos os pixels vêm pelo GTM automaticamente.</div>
-      </div>
-      <span class="step-badge sb-pend" id="step2-badge">Aguardando</span>
+  <!-- ── 3. Log de deploy ───────────────────────────────────────────────── -->
+  <div class="log-card" id="log-card">
+    <div class="log-head">
+      <h4>Log de configuração</h4>
+      <span id="log-status-badge"></span>
     </div>
-    <div class="step-body">
-      <p style="font-size:0.82rem;color:var(--muted);margin:0.5rem 0 0.75rem;line-height:1.6;">
-        Cole os dois trechos abaixo no HTML da sua landing page. <strong>Nunca mais precisará mexer nisso</strong> — quando trocar de produto ou adicionar novo pixel, basta atualizar no GTM pelo próximo passo.
-      </p>
-
-      <div style="font-size:0.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:0.4rem;">No &lt;head&gt; — antes do &lt;/head&gt;</div>
-      <div class="code-wrap">
-        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
-        <pre class="snip" id="gtm-head-snip">{{ "<!-- Google Tag Manager -->\n<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':\nnew Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],\nj=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=\n'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);\n})(window,document,'script','dataLayer','" + (ap.gtm_pub or 'SEU-GTM-ID') + "');</script>\n<!-- End Google Tag Manager -->" }}</pre>
-      </div>
-
-      <div style="font-size:0.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:1rem 0 0.4rem;">Logo após o &lt;body&gt;</div>
-      <div class="code-wrap">
-        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
-        <pre class="snip">{{ "<!-- Google Tag Manager (noscript) -->\n<noscript><iframe src=\"https://www.googletagmanager.com/ns.html?id=" + (ap.gtm_pub or 'SEU-GTM-ID') + "\"\nheight=\"0\" width=\"0\" style=\"display:none;visibility:hidden\"></iframe></noscript>\n<!-- End Google Tag Manager (noscript) -->" }}</pre>
-      </div>
-
-      {% if not ap.gtm_pub %}
-      <div style="background:rgba(255,180,0,.1);border:1px solid rgba(255,180,0,.3);border-radius:8px;padding:0.65rem 1rem;font-size:0.8rem;color:#ffb400;margin-top:0.75rem;">
-        ⚠ GTM_PUBLIC_ID não configurado. <a href="/conexoes" style="color:#ffb400;">Configure em Conexões → Rastreamento →</a>
-      </div>
-      {% endif %}
-
-      <div style="margin-top:1rem;">
-        <button class="btn btn-primary" onclick="markStep2Done()">✓ Instalei o snippet</button>
-      </div>
-    </div>
+    <div id="log-body"></div>
   </div>
 
-  {# STEP 3 — Deploy automático no GTM #}
-  <div class="step" id="step-deploy">
-    <div class="step-head">
-      <div class="step-num">3</div>
-      <div class="step-info">
-        <div class="step-title">Configurar tudo no GTM automaticamente</div>
-        <div class="step-sub">
-          Cria tags, triggers e variáveis — e publica o container.
-          {% if not has_gtm_api %}
-          <span style="color:#ffb400;"> ⚠ Requer GTM API configurada.</span>
-          {% endif %}
-        </div>
-      </div>
-      <span class="step-badge sb-pend" id="step3-badge">Pronto para deploy</span>
+  <!-- ── 4. Snippet GTM ────────────────────────────────────────────────── -->
+  {% if env.GTM_PUBLIC_ID or env.GTM_OAUTH_REFRESH_TOKEN %}
+  <div class="snip-card" id="snippet-card">
+    <div class="snip-head">
+      <h4>Snippet GTM — cole no &lt;head&gt;</h4>
+      <span style="font-size:0.75rem;color:var(--muted);">Uma única vez em todas as páginas</span>
     </div>
-    <div class="step-body">
-
-      {% if has_gtm_api %}
-      <p style="font-size:0.82rem;color:var(--muted);margin:0.5rem 0 1rem;line-height:1.6;">
-        Um clique vai criar automaticamente no seu container GTM:
-      </p>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem;margin-bottom:1.25rem;font-size:0.8rem;">
-        {% for item in [
-          ('Tags', 'UTM Engine, Form Injector, Engagement'),
-          ('Meta Pixel', 'PageView + Lead' if ap.meta else '— não configurado'),
-          ('GA4', 'Configuration + 4 eventos' if ap.ga4 else '— não configurado'),
-          ('LinkedIn', 'Insight Tag' if ap.li else '— não configurado'),
-          ('TikTok', 'PageView + Lead' if ap.tt else '— não configurado'),
-          ('HubSpot', 'Tracking Code' if ap.hs else '— não configurado'),
-          ('Triggers', 'generate_lead, scroll_depth, cta_click, exit_intent'),
-          ('Variáveis', '5× UTM dataLayer + 3× localStorage JS'),
-        ] %}
-        <div class="check-row">
-          <span class="ci" style="color:{{ '#00c864' if (loop.index <= 3 or (loop.index == 4 and ap.meta) or (loop.index == 5 and ap.ga4) or (loop.index == 6 and ap.li) or (loop.index == 7 and ap.tt) or (loop.index == 8 and ap.hs)) else 'var(--muted)' }};">
-            {{ '✓' if (loop.index <= 3 or (loop.index == 4 and ap.meta) or (loop.index == 5 and ap.ga4) or (loop.index == 6 and ap.li) or (loop.index == 7 and ap.tt) or (loop.index == 8 and ap.hs)) else '○' }}
-          </span>
-          <span><strong>{{ item[0] }}:</strong> <span style="color:var(--muted);">{{ item[1] }}</span></span>
-        </div>
-        {% endfor %}
-      </div>
-
-      <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem;">
-        <button class="btn btn-primary" id="deploy-btn" onclick="deployGTM()" style="font-size:0.95rem;padding:0.65rem 1.5rem;">
-          🚀 Configurar e publicar no GTM
-        </button>
-        <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.8rem;color:var(--muted);cursor:pointer;">
-          <input type="checkbox" id="publish-check" checked style="accent-color:var(--primary);">
-          Publicar container após configurar
-        </label>
-      </div>
-
-      {% else %}
-      <div style="background:rgba(255,180,0,.08);border:1px solid rgba(255,180,0,.3);border-radius:10px;padding:1rem 1.1rem;font-size:0.82rem;line-height:1.6;margin-bottom:1rem;">
-        <strong style="color:#ffb400;">GTM API não configurada</strong><br>
-        Para o deploy automático funcionar, configure em <a href="/conexoes" style="color:#ffb400;">Conexões → Rastreamento</a>:
-        <ul style="margin:0.5rem 0 0 1rem;color:var(--muted);">
-          <li><code>GTM_ACCOUNT_ID</code> — ID numérico da conta GTM</li>
-          <li><code>GTM_CONTAINER_ID</code> — ID numérico do container</li>
-          <li><code>GTM_CREDENTIALS_JSON</code> — caminho para o Service Account JSON com permissão <em>GTM Edit</em></li>
-        </ul>
-        <div style="margin-top:0.75rem;">
-          Alternativa imediata: <strong>exporte o container abaixo e importe manualmente no GTM</strong>.
-        </div>
-      </div>
-      <button class="btn btn-primary" onclick="exportGTM()">⬇ Exportar container GTM para importar manualmente</button>
-      {% endif %}
-
-      <div id="deploy-log"></div>
+    <p class="snip-desc">
+      Cole este código imediatamente após a tag <code>&lt;head&gt;</code> de todas as páginas do seu site.
+      Após isso, todas as tags configuradas acima já estarão ativas.
+    </p>
+    <div class="snip-wrap">
+      <pre class="snip-code" id="gtm-snippet">Carregando...</pre>
+      <button class="copy-btn" onclick="copySnippet(this)" id="copy-snip-btn">Copiar</button>
     </div>
   </div>
+  {% endif %}
 
-  {# STEP 4 — Teste #}
-  <div class="step" id="step-test">
-    <div class="step-head">
-      <div class="step-num">4</div>
-      <div class="step-info">
-        <div class="step-title">Confirme que tudo está funcionando</div>
-        <div class="step-sub">Valide os pixels na landing page antes de subir tráfego.</div>
-      </div>
-      <span class="step-badge sb-pend" id="step4-badge">Aguardando</span>
-    </div>
-    <div class="step-body">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-top:0.5rem;">
-
-        {% if ap.gtm_pub %}
-        <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:0.85rem 1rem;">
-          <div style="font-weight:700;font-size:0.85rem;margin-bottom:0.4rem;">GTM Preview</div>
-          <p style="font-size:0.78rem;color:var(--muted);margin:0 0 0.65rem;line-height:1.5;">Acesse a LP com o GTM em modo debug para ver cada tag disparando.</p>
-          <a href="https://tagassistant.google.com/" target="_blank" class="btn btn-primary btn-sm">Abrir Tag Assistant →</a>
-        </div>
-        {% endif %}
-
-        {% if ap.meta %}
-        <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:0.85rem 1rem;">
-          <div style="font-weight:700;font-size:0.85rem;margin-bottom:0.4rem;">Meta Events Manager</div>
-          <p style="font-size:0.78rem;color:var(--muted);margin:0 0 0.65rem;line-height:1.5;">Veja o evento Lead chegando em tempo real no Meta.</p>
-          <a href="https://business.facebook.com/events_manager2/list/pixel/{{ ap.meta }}/test_events" target="_blank" class="btn btn-primary btn-sm">Abrir Events Manager →</a>
-        </div>
-        {% endif %}
-
-        {% if ap.ga4 %}
-        <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:0.85rem 1rem;">
-          <div style="font-weight:700;font-size:0.85rem;margin-bottom:0.4rem;">GA4 DebugView</div>
-          <p style="font-size:0.78rem;color:var(--muted);margin:0 0 0.65rem;line-height:1.5;">Eventos em tempo real no Google Analytics.</p>
-          <a href="https://analytics.google.com/analytics/web/#/p{{ ap.ga4.replace('G-','') }}/reports/dashboard" target="_blank" class="btn btn-primary btn-sm">Abrir GA4 →</a>
-        </div>
-        {% endif %}
-
-        <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:0.85rem 1rem;">
-          <div style="font-weight:700;font-size:0.85rem;margin-bottom:0.4rem;">Disparar evento de teste</div>
-          <p style="font-size:0.78rem;color:var(--muted);margin:0 0 0.65rem;line-height:1.5;">Envia um <code>generate_lead</code> para todos os pixels desta aba.</p>
-          <button class="btn btn-ghost btn-sm" onclick="fireTestEvent()">Disparar agora</button>
-          <div id="test-log" style="margin-top:0.5rem;font-size:0.75rem;font-family:monospace;color:var(--muted);min-height:1rem;"></div>
-        </div>
-
-      </div>
-    </div>
-  </div>
-
-</div>{# /wizard-gtm #}
-
-
-{# ══════════════════════════════════════════
-   MODO SEM GTM — MEGA SNIPPET
-══════════════════════════════════════════ #}
-<div id="wizard-nogtm" class="wizard" style="display:none;">
-
-  <div class="step active">
-    <div class="step-head">
-      <div class="step-num">1</div>
-      <div class="step-info">
-        <div class="step-title">Cole este único snippet no &lt;head&gt; da landing page</div>
-        <div class="step-sub">Inclui UTM Engine + todos os pixels configurados. Nada mais precisa ser feito.</div>
-      </div>
-      <button class="btn btn-primary btn-sm" onclick="loadMegaSnippet()">Gerar snippet</button>
-    </div>
-    <div class="step-body">
-      <p style="font-size:0.82rem;color:var(--muted);margin:0.5rem 0 0.75rem;line-height:1.5;">
-        Clique em <strong>Gerar snippet</strong> para gerar o código completo com todos os seus IDs configurados.
-        Copie e cole no <code>&lt;head&gt;</code> do HTML da sua landing page — <strong>só isso, nada mais</strong>.
-      </p>
-      <div id="mega-snip-wrap" style="display:none;">
-        <div class="code-wrap">
-          <button class="copy-btn" onclick="copyCode(this)">Copiar tudo</button>
-          <pre class="snip" id="mega-snip" style="max-height:400px;overflow-y:auto;"></pre>
-        </div>
-        <div style="background:rgba(0,200,100,.08);border:1px solid rgba(0,200,100,.3);border-radius:8px;padding:0.65rem 1rem;font-size:0.8rem;color:#00c864;margin-top:0.75rem;">
-          ✓ Snippet gerado com os IDs configurados. Cole no &lt;head&gt; e o rastreamento está ativo.
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="step">
-    <div class="step-head">
-      <div class="step-num">2</div>
-      <div class="step-info">
-        <div class="step-title">Disparo de conversão — cole no submit do formulário</div>
-        <div class="step-sub">Sem GTM, você precisa chamar este código quando o lead converter.</div>
-      </div>
-    </div>
-    <div class="step-body">
-      <p style="font-size:0.82rem;color:var(--muted);margin:0.5rem 0 0.75rem;line-height:1.5;">
-        Cole este código no evento de submit do formulário (ou na página de obrigado):
-      </p>
-      <div class="code-wrap">
-        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
-        <pre class="snip">// Cole no submit do formulário ou na página de obrigado
-var _utms = (window.IXC && window.IXC.getUtmLast()) || {};
-
-// Meta Pixel — Lead
-if(typeof fbq !== 'undefined') {
-  fbq('track', 'Lead', {
-    utm_campaign: _utms.utm_campaign || '',
-    utm_source:   _utms.utm_source   || '',
-    currency: 'BRL', value: 0,
-  });
-}
-
-// TikTok — SubmitForm
-if(typeof ttq !== 'undefined') ttq.track('SubmitForm');
-
-// LinkedIn — Conversão
-if(typeof lintrk !== 'undefined') lintrk('track', { conversion_id: '' });
-
-// dataLayer (para GA4 e qualquer outro via GTM)
-window.dataLayer = window.dataLayer || [];
-window.dataLayer.push({
-  event: 'generate_lead',
-  utm_source:   _utms.utm_source   || '',
-  utm_medium:   _utms.utm_medium   || '',
-  utm_campaign: _utms.utm_campaign || '',
-  form_id: 'seu-formulario',
-  currency: 'BRL', value: 0,
-});</pre>
-      </div>
-    </div>
-  </div>
-
-</div>{# /wizard-nogtm #}
-
+</div>
 {% endblock %}
-
 
 {% block scripts %}
 <script>
-const ACTIVE_PRODUCT = '{{ active_product or "" }}';
-
-// ── Mode switch ────────────────────────────────────────────────────────────────
-function setMode(mode, btn) {
-  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('wizard-gtm').style.display    = mode === 'gtm'    ? '' : 'none';
-  document.getElementById('wizard-nogtm').style.display  = mode === 'nogtm'  ? '' : 'none';
+// ── Carrega snippet GTM ──────────────────────────────────────────────────────
+async function loadSnippet() {
+  const el = document.getElementById('gtm-snippet');
+  if (!el) return;
+  try {
+    const r = await fetch('/api/gtm/snippet');
+    const d = await r.json();
+    el.textContent = d.snippet || d.error || '(snippet não disponível)';
+  } catch(e) {
+    el.textContent = '(erro ao carregar snippet)';
+  }
 }
+loadSnippet();
 
-// ── Copy code ─────────────────────────────────────────────────────────────────
-function copyCode(btn) {
-  var pre = btn.closest('.code-wrap').querySelector('pre');
-  navigator.clipboard.writeText(pre.textContent).then(function(){
-    btn.textContent = 'Copiado!';
-    btn.classList.add('copied');
-    setTimeout(function(){ btn.textContent = 'Copiar'; btn.classList.remove('copied'); }, 2000);
-  });
-}
+// ── Deploy ────────────────────────────────────────────────────────────────────
+async function runDeploy() {
+  const mainUrl     = document.getElementById('main-url').value.trim();
+  const thankyouUrl = document.getElementById('thankyou-url').value.trim();
 
-// ── Step 2 confirm ────────────────────────────────────────────────────────────
-function markStep2Done() {
-  var step = document.getElementById('step-install');
-  step.classList.remove('active');
-  step.classList.add('done');
-  step.querySelector('.step-num').textContent = '✓';
-  document.getElementById('step2-badge').textContent = 'Instalado';
-  document.getElementById('step2-badge').className = 'step-badge sb-done';
-  document.getElementById('step-deploy').classList.add('active');
-  showToast('Snippet instalado! Agora configure o GTM automaticamente.');
-}
+  if (!thankyouUrl) {
+    showToast('Informe a URL da página de obrigado', 'error');
+    document.getElementById('thankyou-url').focus();
+    return;
+  }
 
-// ── GTM Deploy ────────────────────────────────────────────────────────────────
-async function deployGTM() {
-  var btn    = document.getElementById('deploy-btn');
-  var logEl  = document.getElementById('deploy-log');
-  var pub    = document.getElementById('publish-check').checked;
-  var badge  = document.getElementById('step3-badge');
-
+  const btn = document.getElementById('deploy-btn');
   btn.disabled = true;
-  btn.textContent = '⏳ Configurando...';
-  badge.textContent = 'Configurando...';
-  badge.className = 'step-badge sb-active';
-  logEl.style.display = 'block';
-  logEl.innerHTML = '<span class="log-info">Conectando ao GTM...</span>';
+  btn.innerHTML = '<span class="spin"></span>Configurando GTM...';
+
+  const logCard = document.getElementById('log-card');
+  const logBody = document.getElementById('log-body');
+  const badge   = document.getElementById('log-status-badge');
+  logCard.classList.add('visible');
+  logBody.innerHTML = '';
+  badge.textContent = 'executando...';
+  badge.style.cssText = 'background:rgba(255,255,255,.07);color:var(--muted);font-size:.7rem;font-weight:700;padding:.2rem .6rem;border-radius:20px;';
 
   try {
     const r = await fetch('/api/rastreamento/deploy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product: ACTIVE_PRODUCT, publish: pub }),
+      body: JSON.stringify({
+        main_url: mainUrl,
+        thankyou_url: thankyouUrl,
+        publish: true,
+      }),
     });
     const d = await r.json();
 
-    if (d.ok) {
-      logEl.innerHTML = d.log.map(line => {
-        if (line.startsWith('✓'))   return `<div class="log-ok">${line}</div>`;
-        if (line.startsWith('↺'))   return `<div class="log-upd">${line}</div>`;
-        if (line.startsWith('  →')) return `<div class="log-info">${line}</div>`;
-        return `<div class="log-sum">${line}</div>`;
-      }).join('');
-
-      document.getElementById('step-deploy').classList.remove('active');
-      document.getElementById('step-deploy').classList.add('done');
-      document.getElementById('step-deploy').querySelector('.step-num').textContent = '✓';
-      badge.textContent = pub ? 'Publicado ✓' : 'Configurado ✓';
-      badge.className = 'step-badge sb-done';
-      document.getElementById('step-test').classList.add('active');
-      document.getElementById('step4-badge').textContent = 'Testar agora';
-      document.getElementById('step4-badge').className = 'step-badge sb-active';
-      showToast(pub ? 'GTM configurado e publicado com sucesso!' : 'GTM configurado! Lembre de publicar manualmente.');
+    if (d.error) {
+      appendLog('err', '✗ ' + d.error);
+      badge.textContent = 'erro';
+      badge.style.cssText = 'background:rgba(255,68,68,.12);color:#ff6b6b;font-size:.7rem;font-weight:700;padding:.2rem .6rem;border-radius:20px;';
+      showToast(d.error, 'error');
     } else {
-      logEl.innerHTML = `<div class="log-err">Erro: ${d.error}</div>`;
-      badge.textContent = 'Erro';
-      badge.className = 'step-badge sb-err';
+      (d.log || []).forEach(line => {
+        if (line.startsWith('✓ Container') || line.startsWith('✓ Deploy') || line.startsWith('✓ Container GTM publ')) {
+          appendLog('pub', line);
+        } else if (line.startsWith('✓')) {
+          appendLog('ok', line);
+        } else if (line.startsWith('↺')) {
+          appendLog('upd', line);
+        } else if (line.startsWith('  →') || line.startsWith('  ℹ')) {
+          appendLog('info', line);
+        } else if (line.includes('concluído') || line.includes('Deploy')) {
+          appendLog('sum', line);
+        } else {
+          appendLog('info', line);
+        }
+      });
+      badge.textContent = 'concluído ✓';
+      badge.style.cssText = 'background:rgba(163,255,0,.12);color:var(--primary);font-size:.7rem;font-weight:700;padding:.2rem .6rem;border-radius:20px;';
+      showToast('GTM configurado e publicado com sucesso!');
+      // Atualiza snippet (pode ter mudado o public_id)
+      loadSnippet();
     }
-  } catch (e) {
-    logEl.innerHTML = `<div class="log-err">Erro de conexão: ${e.message}</div>`;
-    badge.textContent = 'Erro';
-    badge.className = 'step-badge sb-err';
-  }
-
-  btn.disabled = false;
-  btn.textContent = '🚀 Configurar e publicar no GTM';
-}
-
-// ── GTM Export (fallback) ─────────────────────────────────────────────────────
-async function exportGTM() {
-  const r = await fetch('/api/rastreamento/gtm-export?product=' + encodeURIComponent(ACTIVE_PRODUCT));
-  const data = await r.json();
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url  = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href=url; a.download='ixctraffic_gtm.json'; a.click();
-  URL.revokeObjectURL(url);
-  showToast('Container exportado! Importe em GTM → Admin → Import Container (Merge).');
-}
-
-// ── Mega snippet ──────────────────────────────────────────────────────────────
-async function loadMegaSnippet() {
-  const r = await fetch('/api/rastreamento/mega-snippet?product=' + encodeURIComponent(ACTIVE_PRODUCT));
-  const d = await r.json();
-  if (d.snippet) {
-    document.getElementById('mega-snip').textContent = d.snippet;
-    document.getElementById('mega-snip-wrap').style.display = 'block';
+  } catch(e) {
+    appendLog('err', '✗ Erro de rede: ' + e.message);
+    badge.textContent = 'erro';
+    badge.style.cssText = 'background:rgba(255,68,68,.12);color:#ff6b6b;font-size:.7rem;font-weight:700;padding:.2rem .6rem;border-radius:20px;';
+    showToast('Erro de rede', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Configurar e publicar no GTM';
+    logBody.scrollTop = logBody.scrollHeight;
   }
 }
 
-// ── Test event ────────────────────────────────────────────────────────────────
-function fireTestEvent() {
-  var log = document.getElementById('test-log');
-  var ts  = new Date().toLocaleTimeString('pt-BR');
-  window.dataLayer = window.dataLayer || [];
-  window.dataLayer.push({
-    event: 'generate_lead',
-    utm_source: 'ixctraffic_test',
-    utm_campaign: 'tracking_validation',
-    form_id: 'test',
-    value: 0, currency: 'BRL',
+function appendLog(type, text) {
+  const el = document.createElement('div');
+  el.className = 'log-' + type;
+  el.textContent = text;
+  document.getElementById('log-body').appendChild(el);
+  document.getElementById('log-body').scrollTop = 999999;
+}
+
+// ── Copiar snippet ────────────────────────────────────────────────────────────
+function copySnippet(btn) {
+  const code = document.getElementById('gtm-snippet').textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    btn.textContent = 'Copiado!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copiar'; btn.classList.remove('copied'); }, 2000);
   });
-  var lines = [`[${ts}] generate_lead → dataLayer ✓`];
-  if (typeof fbq !== 'undefined')    { fbq('track','Lead',{value:0,currency:'BRL'}); lines.push(`[${ts}] Meta Pixel Lead ✓`); }
-  if (typeof ttq !== 'undefined')    { ttq.track('SubmitForm'); lines.push(`[${ts}] TikTok SubmitForm ✓`); }
-  if (typeof lintrk !== 'undefined') { lines.push(`[${ts}] LinkedIn disponível ✓`); }
-  if (typeof gtag !== 'undefined')   { lines.push(`[${ts}] gtag (GA4) disponível ✓`); }
-  log.style.color = '#00c864';
-  log.innerHTML = lines.join('<br>');
 }
 </script>
 {% endblock %}
