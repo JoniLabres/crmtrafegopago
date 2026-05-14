@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Alterar Senha{% endblock %}
+{% block topbar_title %}Minha Conta{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Alterar Senha</h1>
+  <p class="page-desc">Atualize a sua senha de acesso à plataforma</p>
+</div>
+
+<div class="panel" style="max-width:480px;">
+  <div class="panel-body">
+
+    {% if success %}
+    <div style="background:rgba(163,255,0,.1);border:1px solid rgba(163,255,0,.3);border-radius:8px;
+                color:#a3ff00;font-size:0.85rem;padding:0.75rem 1rem;margin-bottom:1.25rem;">
+      Senha alterada com sucesso!
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div style="background:rgba(255,68,68,.1);border:1px solid rgba(255,68,68,.3);border-radius:8px;
+                color:#ff6b6b;font-size:0.85rem;padding:0.75rem 1rem;margin-bottom:1.25rem;">
+      {{ error }}
+    </div>
+    {% endif %}
+
+    <div style="margin-bottom:1.5rem;padding-bottom:1.25rem;border-bottom:1px solid var(--border);">
+      <div style="font-size:0.75rem;color:var(--muted);margin-bottom:2px;">Logado como</div>
+      <div style="font-weight:600;">{{ current_user.name or current_user.email }}</div>
+      <div style="font-size:0.82rem;color:var(--muted);">{{ current_user.email }}</div>
+    </div>
+
+    <form method="POST" action="/minha-conta/senha">
+      <div class="form-group">
+        <label>Senha atual</label>
+        <input class="input input-dark" type="password" name="current_password"
+               placeholder="••••••••" required autofocus>
+      </div>
+      <div class="form-group">
+        <label>Nova senha</label>
+        <input class="input input-dark" type="password" name="new_password"
+               placeholder="Mínimo 8 caracteres" required minlength="8">
+      </div>
+      <div class="form-group">
+        <label>Confirmar nova senha</label>
+        <input class="input input-dark" type="password" name="confirm_password"
+               placeholder="Repita a nova senha" required minlength="8">
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%;margin-top:0.5rem;">
+        Salvar nova senha
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

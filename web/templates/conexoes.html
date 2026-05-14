@@ -37,7 +37,7 @@
 <div id="tab-credenciais" class="tab-panel">
 
   <!-- Status rápido -->
-  <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:1.5rem;">
+  <div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:1.5rem;">
     <div class="kpi-card">
       <div class="kpi-label">Meta Ads</div>
       <div class="kpi-value" style="font-size:1.1rem;color:{{ 'var(--primary)' if env.META_ACCESS_TOKEN else 'var(--muted)' }}">
@@ -60,6 +60,12 @@
       <div class="kpi-label">TikTok Ads</div>
       <div class="kpi-value" style="font-size:1.1rem;color:{{ 'var(--primary)' if env.TIKTOK_ACCESS_TOKEN else 'var(--muted)' }}">
         {{ '● Conectado' if env.TIKTOK_ACCESS_TOKEN else '○ Pendente' }}
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">HubSpot CRM</div>
+      <div class="kpi-value" style="font-size:1.1rem;color:{{ 'var(--primary)' if (env.HUBSPOT_ACCESS_TOKEN or env.HUBSPOT_API_KEY) else 'var(--muted)' }}">
+        {{ '● Conectado' if (env.HUBSPOT_ACCESS_TOKEN or env.HUBSPOT_API_KEY) else '○ Pendente' }}
       </div>
     </div>
   </div>
@@ -237,18 +243,48 @@
         <div class="conn-icon" style="background:rgba(255,122,0,0.15);">🟠</div>
         <div>
           <div class="conn-name">HubSpot CRM</div>
-          <div class="conn-status {{ 'ok' if env.HUBSPOT_API_KEY else 'na' }}">
-            {{ '✓ Conectado' if env.HUBSPOT_API_KEY else '○ Não configurado' }}
+          <div class="conn-status {{ 'ok' if (env.HUBSPOT_ACCESS_TOKEN or env.HUBSPOT_API_KEY) else 'na' }}">
+            {% if env.HUBSPOT_ACCESS_TOKEN %}
+              ✓ Conectado via OAuth{% if env.HUBSPOT_PORTAL_ID %} · Portal {{ env.HUBSPOT_PORTAL_ID }}{% endif %}
+            {% elif env.HUBSPOT_API_KEY %}
+              ✓ Conectado (Private App)
+            {% else %}
+              ○ Não configurado
+            {% endif %}
           </div>
         </div>
       </div>
-      <form class="conn-body" onsubmit="saveEnv(event, 'hubspot')">
-        <div class="form-group">
-          <label>API Key (Private App Token)</label>
-          <input name="HUBSPOT_API_KEY" class="input input-dark" type="password" placeholder="pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="{{ env.HUBSPOT_API_KEY or '' }}">
+      <div class="conn-body">
+        <div style="background:rgba(255,122,0,0.07);border:1px solid rgba(255,122,0,0.2);border-radius:8px;padding:0.75rem 1rem;font-size:0.8rem;line-height:1.5;color:var(--muted);">
+          <strong style="color:var(--text);">OAuth 2.0 recomendado.</strong> Clique em <em>Conectar com HubSpot</em> para autorizar o acesso ao seu portal. É necessário ter um <strong>HubSpot App</strong> com <em>Client ID</em> e <em>Client Secret</em> configurados abaixo.
         </div>
-        <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end;">Salvar</button>
-      </form>
+        <a href="/auth/connect/hubspot" class="btn btn-oauth" style="background:#ff7a00;color:#fff;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:0.5rem;padding:0.55rem 1rem;border-radius:8px;font-size:0.9rem;font-weight:600;">
+          <svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px;"><path d="M18.164 7.93V5.773a1.56 1.56 0 00.898-1.408V4.32A1.56 1.56 0 0017.504 2.76h-.047a1.56 1.56 0 00-1.558 1.56v.046a1.56 1.56 0 00.898 1.408V7.93a4.43 4.43 0 00-2.1.92L8.207 4.366a1.56 1.56 0 10-.797 1.377l6.344 4.418a4.437 4.437 0 00-.576 2.167 4.437 4.437 0 004.437 4.437 4.437 4.437 0 004.437-4.437 4.437 4.437 0 00-3.888-4.398zM5.625 13.5a1.125 1.125 0 110-2.25 1.125 1.125 0 010 2.25zm11.832 2.813a2.25 2.25 0 110-4.5 2.25 2.25 0 010 4.5z"/></svg>
+          Conectar com HubSpot
+        </a>
+        <details style="margin-top:0.5rem;">
+          <summary style="font-size:0.8rem;color:var(--muted);cursor:pointer;user-select:none;">Configurações do HubSpot App (necessário para OAuth)</summary>
+          <form onsubmit="saveEnv(event, 'hubspot')" style="display:flex;flex-direction:column;gap:0.75rem;margin-top:0.75rem;">
+            <div class="form-group" style="margin:0;">
+              <label>Client ID</label>
+              <input name="HUBSPOT_CLIENT_ID" class="input input-dark" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="{{ env.HUBSPOT_CLIENT_ID or '' }}">
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label>Client Secret</label>
+              <input name="HUBSPOT_CLIENT_SECRET" class="input input-dark" type="password" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="{{ env.HUBSPOT_CLIENT_SECRET or '' }}">
+            </div>
+            <button type="submit" class="btn btn-outline btn-sm" style="align-self:flex-end;">Salvar</button>
+          </form>
+        </details>
+        <div class="oauth-divider">ou use Private App Token</div>
+        <form onsubmit="saveEnv(event, 'hubspot_key')" style="display:contents;">
+          <div class="form-group">
+            <label>Private App Token <span style="color:var(--muted);font-size:0.75rem;">(alternativa sem OAuth)</span></label>
+            <input name="HUBSPOT_API_KEY" class="input input-dark" type="password" placeholder="pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="{{ env.HUBSPOT_API_KEY or '' }}">
+          </div>
+          <button type="submit" class="btn btn-ghost btn-sm" style="align-self:flex-end;">Salvar token</button>
+        </form>
+      </div>
     </div>
 
     <!-- Claude API + Slack + DB -->
@@ -286,6 +322,40 @@
           <div class="form-group">
             <label>Database URL (PostgreSQL)</label>
             <input name="DATABASE_URL" class="input input-dark" placeholder="postgresql://user:pass@host:5432/dbname" value="{{ env.DATABASE_URL or '' }}">
+          </div>
+        </div>
+        <!-- E-mail (SMTP) -->
+        <div style="border-top:1px solid var(--border);padding-top:0.75rem;margin-top:0.25rem;">
+          <div style="font-size:0.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.6rem;">
+            E-mail — envio de credenciais de acesso
+          </div>
+          <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.75rem;line-height:1.5;">
+            Quando um usuário é criado, as credenciais são enviadas automaticamente por e-mail.<br>
+            <strong style="color:var(--text);">Gmail:</strong> use uma
+            <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:var(--primary);">App Password</a>
+            (conta com 2FA ativa) · porta 587.
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+            <div class="form-group" style="margin:0;">
+              <label>SMTP Host</label>
+              <input name="SMTP_HOST" class="input input-dark" placeholder="smtp.gmail.com" value="{{ env.SMTP_HOST or '' }}">
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label>Porta</label>
+              <input name="SMTP_PORT" class="input input-dark" placeholder="587" value="{{ env.SMTP_PORT or '587' }}">
+            </div>
+          </div>
+          <div class="form-group" style="margin-top:0.75rem;">
+            <label>Usuário SMTP (e-mail remetente)</label>
+            <input name="SMTP_USER" class="input input-dark" placeholder="voce@gmail.com" value="{{ env.SMTP_USER or '' }}">
+          </div>
+          <div class="form-group">
+            <label>Senha SMTP / App Password</label>
+            <input name="SMTP_PASSWORD" class="input input-dark" type="password" placeholder="••••••••••••••••" value="{{ env.SMTP_PASSWORD or '' }}">
+          </div>
+          <div class="form-group">
+            <label>URL da plataforma <span style="color:var(--muted);font-size:0.72rem;">(link no e-mail)</span></label>
+            <input name="APP_URL" class="input input-dark" placeholder="https://crmtrafegopago.vercel.app" value="{{ env.APP_URL or 'https://crmtrafegopago.vercel.app' }}">
           </div>
         </div>
         <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end;">Salvar</button>

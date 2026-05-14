@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% block title %}Usuários{% endblock %}
+{% block topbar_title %}Gestão de Usuários{% endblock %}
+
+{% block content %}
+<div class="page-header flex items-center" style="justify-content:space-between;">
+  <div>
+    <h1 class="page-title">Usuários</h1>
+    <p class="page-desc">Controle de acesso à plataforma</p>
+  </div>
+  <button class="btn btn-primary" onclick="document.getElementById('add-modal').style.display='flex'">
+    + Adicionar Usuário
+  </button>
+</div>
+
+<!-- Tabela de usuários -->
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Nome</th>
+        <th>E-mail</th>
+        <th>Perfil</th>
+        <th>Status</th>
+        <th>Último acesso</th>
+        <th>Cadastrado em</th>
+        <th style="text-align:right;">Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td style="font-weight:600;">{{ u.name or '—' }}</td>
+        <td style="font-family:monospace;font-size:0.82rem;">{{ u.email }}</td>
+        <td>
+          {% if u.role == 'admin' %}
+          <span class="badge" style="background:rgba(163,255,0,.15);color:#a3ff00;border:1px solid rgba(163,255,0,.3);">admin</span>
+          {% else %}
+          <span class="badge" style="background:rgba(255,255,255,.08);color:#ccc;">usuário</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if u.is_active %}
+          <span class="badge" style="background:rgba(0,200,100,.15);color:#00c864;">ativo</span>
+          {% else %}
+          <span class="badge" style="background:rgba(255,68,68,.12);color:#ff6b6b;">inativo</span>
+          {% endif %}
+        </td>
+        <td style="font-size:0.82rem;color:var(--muted);">
+          {{ u.last_login.strftime('%d/%m/%Y %H:%M') if u.last_login else '—' }}
+        </td>
+        <td style="font-size:0.82rem;color:var(--muted);">
+          {{ u.created_at.strftime('%d/%m/%Y') if u.created_at else '—' }}
+        </td>
+        <td style="text-align:right;">
+          <div class="flex gap-1" style="justify-content:flex-end;">
+            {% if u.id != current_user.id %}
+            <button class="btn btn-ghost btn-sm"
+                    onclick="toggleUser({{ u.id }}, '{{ u.name or u.email }}', {{ 'true' if u.is_active else 'false' }})">
+              {{ 'Desativar' if u.is_active else 'Ativar' }}
+            </button>
+            {% endif %}
+            <button class="btn btn-ghost btn-sm"
+                    onclick="openResetModal({{ u.id }}, '{{ u.name or u.email }}')">
+              Senha
+            </button>
+            {% if u.id != current_user.id %}
+            <button class="btn btn-sm" style="background:rgba(255,68,68,.15);color:#ff6b6b;border:1px solid rgba(255,68,68,.3);"
+                    onclick="removeUser({{ u.id }}, '{{ u.name or u.email }}')">
+              Remover
+            </button>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem;">Nenhum usuário cadastrado</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- ── Modal: Adicionar Usuário ───────────────────────────────────────── -->
+<div id="add-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);
+     z-index:200;align-items:center;justify-content:center;">
+  <div class="card" style="width:460px;max-width:95vw;border-color:var(--border);">
+    <div class="flex items-center" style="justify-content:space-between;margin-bottom:1.5rem;">
+      <h2 style="font-size:1.1rem;font-weight:700;">Adicionar Usuário</h2>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('add-modal')">✕</button>
+    </div>
+    <form id="add-form">
+      <div class="form-group">
+        <label>Nome completo</label>
+        <input class="input input-dark" id="add-name" placeholder="João Silva" required>
+      </div>
+      <div class="form-group">
+        <label>E-mail</label>
+        <input class="input input-dark" id="add-email" type="email" placeholder="joao@empresa.com" required>
+      </div>
+      <div class="form-group">
+        <label>Senha inicial</label>
+        <input class="input input-dark" id="add-password" type="password"
+               placeholder="Mínimo 8 caracteres" required>
+      </div>
+      <div class="form-group">
+        <label>Perfil</label>
+        <select class="input input-dark" id="add-role">
+          <option value="user">Usuário</option>
+          <option value="admin">Administrador</option>
+        </select>
+      </div>
+      <div id="add-error" style="display:none;color:var(--danger);font-size:0.82rem;margin-bottom:0.75rem;"></div>
+      <button type="button" class="btn btn-primary" style="width:100%;" onclick="addUser()">
+        Criar Usuário
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ── Modal: Redefinir Senha ─────────────────────────────────────────── -->
+<div id="reset-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);
+     z-index:200;align-items:center;justify-content:center;">
+  <div class="card" style="width:400px;max-width:95vw;border-color:var(--border);">
+    <div class="flex items-center" style="justify-content:space-between;margin-bottom:1.5rem;">
+      <h2 style="font-size:1.1rem;font-weight:700;">Redefinir Senha</h2>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('reset-modal')">✕</button>
+    </div>
+    <p id="reset-name" style="font-size:0.85rem;color:var(--muted);margin-bottom:1rem;"></p>
+    <input type="hidden" id="reset-uid">
+    <div class="form-group">
+      <label>Nova senha</label>
+      <input class="input input-dark" id="reset-password" type="password"
+             placeholder="Mínimo 8 caracteres">
+    </div>
+    <div id="reset-error" style="display:none;color:var(--danger);font-size:0.82rem;margin-bottom:0.75rem;"></div>
+    <button class="btn btn-primary" style="width:100%;" onclick="resetPassword()">
+      Salvar nova senha
+    </button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function closeModal(id) {
+  document.getElementById(id).style.display = 'none';
+}
+
+function openResetModal(uid, name) {
+  document.getElementById('reset-uid').value = uid;
+  document.getElementById('reset-name').textContent = 'Usuário: ' + name;
+  document.getElementById('reset-password').value = '';
+  document.getElementById('reset-error').style.display = 'none';
+  document.getElementById('reset-modal').style.display = 'flex';
+}
+
+async function addUser() {
+  const name  = document.getElementById('add-name').value.trim();
+  const email = document.getElementById('add-email').value.trim();
+  const pass  = document.getElementById('add-password').value;
+  const role  = document.getElementById('add-role').value;
+  const errEl = document.getElementById('add-error');
+  errEl.style.display = 'none';
+
+  if (!name || !email || !pass) { errEl.textContent='Preencha todos os campos.'; errEl.style.display='block'; return; }
+  if (pass.length < 8) { errEl.textContent='Senha deve ter no mínimo 8 caracteres.'; errEl.style.display='block'; return; }
+
+  const r = await fetch('/admin/usuarios/add', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({name,email,password:pass,role}),
+  });
+  const d = await r.json();
+  if (d.ok) {
+    if (d.email_sent) {
+      showToast('Usuário criado e e-mail enviado para ' + email + '!');
+    } else if (d.email_warn) {
+      showToast(d.email_warn, 'warn');
+    } else {
+      showToast('Usuário criado com sucesso!');
+    }
+    setTimeout(() => location.reload(), 1800);
+  } else {
+    errEl.textContent = d.error || 'Erro ao criar usuário.';
+    errEl.style.display = 'block';
+  }
+}
+
+async function toggleUser(uid, name, isActive) {
+  const action = isActive ? 'desativar' : 'ativar';
+  if (!confirm(`${action.charAt(0).toUpperCase()+action.slice(1)} o usuário "${name}"?`)) return;
+  const r = await fetch('/admin/usuarios/toggle', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({user_id: uid}),
+  });
+  const d = await r.json();
+  if (d.ok) { location.reload(); }
+  else { showToast('Erro ao atualizar usuário', 'error'); }
+}
+
+async function removeUser(uid, name) {
+  if (!confirm(`Remover permanentemente o usuário "${name}"?\nTodas as sessões serão encerradas.`)) return;
+  const r = await fetch('/admin/usuarios/remove', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({user_id: uid}),
+  });
+  const d = await r.json();
+  if (d.ok) { location.reload(); }
+  else { showToast('Erro ao remover usuário', 'error'); }
+}
+
+async function resetPassword() {
+  const uid  = document.getElementById('reset-uid').value;
+  const pass = document.getElementById('reset-password').value;
+  const errEl = document.getElementById('reset-error');
+  errEl.style.display = 'none';
+
+  if (pass.length < 8) { errEl.textContent='Senha deve ter no mínimo 8 caracteres.'; errEl.style.display='block'; return; }
+
+  const r = await fetch('/admin/usuarios/reset-password', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({user_id: parseInt(uid), password: pass}),
+  });
+  const d = await r.json();
+  if (d.ok) { closeModal('reset-modal'); showToast('Senha atualizada!'); }
+  else { errEl.textContent = d.error || 'Erro ao redefinir senha.'; errEl.style.display='block'; }
+}
+</script>
+{% endblock %}

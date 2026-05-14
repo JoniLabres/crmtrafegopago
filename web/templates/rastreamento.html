@@ -1,0 +1,1280 @@
+{% extends "base.html" %}
+{% block title %}Rastreamento{% endblock %}
+{% block topbar_title %}Rastreamento — Central de Tracking{% endblock %}
+
+{% block head %}
+<style>
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+.track-tabs { display:flex; gap:0.25rem; flex-wrap:wrap; margin-bottom:1.5rem; border-bottom:1px solid var(--border); padding-bottom:0; }
+.track-tab  { padding:0.55rem 1rem; font-size:0.82rem; font-weight:600; color:var(--muted); background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; transition:all .15s; white-space:nowrap; }
+.track-tab:hover  { color:var(--text); }
+.track-tab.active { color:var(--primary); border-bottom-color:var(--primary); }
+.track-panel { display:none; }
+.track-panel.active { display:block; }
+
+/* ── Snippet card ────────────────────────────────────────────────────────── */
+.snip-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; margin-bottom:1rem; overflow:hidden; }
+.snip-head { display:flex; align-items:center; justify-content:space-between; padding:0.9rem 1.1rem; gap:1rem; }
+.snip-title { font-weight:700; font-size:0.92rem; }
+.snip-meta  { display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; }
+.snip-where { font-size:0.72rem; color:var(--muted); background:rgba(255,255,255,.06); border:1px solid var(--border); border-radius:4px; padding:0.15rem 0.5rem; }
+.platform-badge { font-size:0.68rem; font-weight:700; padding:0.15rem 0.45rem; border-radius:4px; }
+.pb-gtm  { background:rgba(30,180,100,.15); color:#1eb464; }
+.pb-meta { background:rgba(24,119,242,.15); color:#6fa8ff; }
+.pb-ga4  { background:rgba(234,67,53,.15);  color:#f88; }
+.pb-li   { background:rgba(0,119,181,.15);  color:#6ab4e0; }
+.pb-tt   { background:rgba(254,44,85,.15);  color:#ff7a9a; }
+.pb-hs   { background:rgba(255,122,0,.15);  color:#ffaa55; }
+.pb-all  { background:rgba(163,255,0,.1);   color:#a3ff00; }
+
+.snip-body { position:relative; border-top:1px solid var(--border); }
+.snip-desc { font-size:0.8rem; color:var(--muted); padding:0.6rem 1.1rem 0; line-height:1.5; }
+pre.code-block {
+  margin:0; padding:1rem 1.1rem 1rem; overflow-x:auto;
+  font-family:'JetBrains Mono','Fira Code',monospace; font-size:0.75rem;
+  line-height:1.6; color:#c9d1d9; background:rgba(0,0,0,.25);
+  tab-size:2; white-space:pre;
+}
+.copy-btn {
+  position:absolute; top:0.6rem; right:0.75rem;
+  background:rgba(163,255,0,.12); color:var(--primary); border:1px solid rgba(163,255,0,.3);
+  border-radius:6px; padding:0.25rem 0.65rem; font-size:0.72rem; font-weight:700;
+  cursor:pointer; transition:all .15s;
+}
+.copy-btn:hover { background:rgba(163,255,0,.22); }
+.copy-btn.copied { background:rgba(0,200,100,.2); color:#00c864; border-color:rgba(0,200,100,.4); }
+
+/* ── Config notice ────────────────────────────────────────────────────────── */
+.cfg-warn { background:rgba(255,180,0,.1); border:1px solid rgba(255,180,0,.35); border-radius:8px; padding:0.65rem 1rem; font-size:0.8rem; color:#ffb400; margin-bottom:0.75rem; display:flex; gap:0.5rem; align-items:center; }
+
+/* ── Measurement plan table ──────────────────────────────────────────────── */
+.mp-table { width:100%; border-collapse:collapse; font-size:0.8rem; }
+.mp-table th { background:rgba(255,255,255,.04); padding:0.6rem 0.8rem; text-align:left; font-weight:700; font-size:0.72rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); border-bottom:1px solid var(--border); }
+.mp-table td { padding:0.55rem 0.8rem; border-bottom:1px solid rgba(255,255,255,.04); vertical-align:top; }
+.mp-table tr:last-child td { border-bottom:none; }
+.mp-table tr:hover td { background:rgba(255,255,255,.025); }
+.check { color:#00c864; font-size:0.9rem; }
+.dash  { color:var(--muted); }
+
+/* ── Test panel ──────────────────────────────────────────────────────────── */
+.test-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+@media(max-width:768px){ .test-grid { grid-template-columns:1fr; } }
+.test-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:1rem 1.1rem; }
+.test-card h4 { font-size:0.85rem; font-weight:700; margin-bottom:0.5rem; }
+.test-card p  { font-size:0.8rem; color:var(--muted); margin:0 0 0.75rem; line-height:1.5; }
+.status-indicator { display:inline-flex; align-items:center; gap:0.4rem; font-size:0.78rem; font-weight:600; }
+.si-ok   { color:#00c864; }
+.si-warn { color:#ffb400; }
+.si-na   { color:var(--muted); }
+
+/* ── Section headings ────────────────────────────────────────────────────── */
+.section-heading { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:1.5rem 0 0.75rem; padding-bottom:0.4rem; border-bottom:1px solid var(--border); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Resolve IDs from active product or global env ── #}
+{% set ap = namespace(gtm='', ga4='', meta='', li='', tt='', hs='') %}
+{% for prod in accounts %}
+  {% if prod.nome == active_product %}
+    {% set ap.gtm  = prod.rastreamento.gtm_public_id    or env.GTM_PUBLIC_ID       or '' %}
+    {% set ap.ga4  = prod.rastreamento.ga4_measurement_id or env.GA4_MEASUREMENT_ID or '' %}
+    {% set ap.meta = prod.contas.meta.pixel_id          or env.META_PIXEL_ID       or '' %}
+    {% set ap.li   = prod.contas.linkedin.partner_id    or env.LINKEDIN_PARTNER_ID or '' %}
+    {% set ap.tt   = prod.contas.tiktok.pixel_id        or env.TIKTOK_PIXEL_ID     or '' %}
+  {% endif %}
+{% endfor %}
+{% if not ap.gtm %} {% set ap.gtm  = env.GTM_PUBLIC_ID        or '' %} {% endif %}
+{% if not ap.ga4 %} {% set ap.ga4  = env.GA4_MEASUREMENT_ID   or '' %} {% endif %}
+{% if not ap.meta%} {% set ap.meta = env.META_PIXEL_ID         or '' %} {% endif %}
+{% if not ap.li  %} {% set ap.li   = env.LINKEDIN_PARTNER_ID   or '' %} {% endif %}
+{% if not ap.tt  %} {% set ap.tt   = env.TIKTOK_PIXEL_ID       or '' %} {% endif %}
+{% set ap.hs = env.HUBSPOT_PORTAL_ID or '' %}
+
+<div class="page-header flex items-center" style="justify-content:space-between;">
+  <div>
+    <h1 class="page-title">Rastreamento</h1>
+    <p class="page-desc">Central de tracking — snippets prontos, GTM export, CAPI, plano de medição e diagnóstico.</p>
+  </div>
+  <div class="flex gap-1">
+    {% if active_product %}
+    <span class="topbar-badge" style="font-size:0.78rem;">📦 {{ active_product }}</span>
+    {% endif %}
+    <button class="btn btn-primary btn-sm" onclick="exportGTM()">⬇ Exportar GTM</button>
+  </div>
+</div>
+
+{# ── Status bar ── #}
+<div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1.5rem;">
+  {% for label, val, color in [
+    ('GTM',      ap.gtm,  '#1eb464'),
+    ('GA4',      ap.ga4,  '#f88'),
+    ('Meta Px',  ap.meta, '#6fa8ff'),
+    ('LinkedIn', ap.li,   '#6ab4e0'),
+    ('TikTok',   ap.tt,   '#ff7a9a'),
+    ('HubSpot',  ap.hs,   '#ffaa55'),
+  ] %}
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.35rem 0.75rem;font-size:0.75rem;display:flex;align-items:center;gap:0.4rem;">
+    <span style="color:{{ color if val else 'var(--muted)' }};font-size:0.6rem;">{{ '●' if val else '○' }}</span>
+    <span style="font-weight:600;color:{{ 'var(--text)' if val else 'var(--muted)' }};">{{ label }}</span>
+    {% if val %}<span style="font-family:monospace;font-size:0.68rem;color:var(--muted);">{{ val[:18] }}{% if val|length > 18 %}…{% endif %}</span>{% endif %}
+  </div>
+  {% endfor %}
+  {% if not (ap.gtm or ap.ga4 or ap.meta) %}
+  <a href="/conexoes" style="background:rgba(255,180,0,.1);border:1px solid rgba(255,180,0,.35);border-radius:8px;padding:0.35rem 0.75rem;font-size:0.75rem;color:#ffb400;text-decoration:none;">⚠ Configure os IDs em Conexões →</a>
+  {% endif %}
+</div>
+
+{# ── Tabs ── #}
+<div class="track-tabs">
+  <button class="track-tab active" onclick="switchTab('base',this)">🏗 Instalação Base</button>
+  <button class="track-tab" onclick="switchTab('utm',this)">🔗 UTM & Atribuição</button>
+  <button class="track-tab" onclick="switchTab('events',this)">⚡ Eventos & dataLayer</button>
+  <button class="track-tab" onclick="switchTab('capi',this)">🖥 CAPI & Server-Side</button>
+  <button class="track-tab" onclick="switchTab('plan',this)">📋 Plano de Medição</button>
+  <button class="track-tab" onclick="switchTab('tests',this)">🔍 Testes & Diagnóstico</button>
+</div>
+
+
+{# ══════════════════════════════════════════════════════════════════════════
+   TAB 1 — INSTALAÇÃO BASE
+══════════════════════════════════════════════════════════════════════════ #}
+<div id="panel-base" class="track-panel active">
+
+  {% if not ap.gtm and not ap.ga4 %}
+  <div class="cfg-warn">⚠ Nenhum ID de GTM ou GA4 configurado. <a href="/conexoes" style="color:#ffb400;margin-left:4px;">Configure em Conexões →</a></div>
+  {% endif %}
+
+  <div class="section-heading">Google Tag Manager</div>
+
+  {# GTM Head #}
+  <div class="snip-card">
+    <div class="snip-head">
+      <div>
+        <div class="snip-title">GTM — Snippet do &lt;head&gt;</div>
+        <div class="snip-meta" style="margin-top:0.3rem;">
+          <span class="snip-where">Cole antes de &lt;/head&gt;</span>
+          <span class="platform-badge pb-gtm">GTM</span>
+          <span class="platform-badge pb-all">Todas as páginas</span>
+        </div>
+      </div>
+    </div>
+    <div class="snip-body">
+      <div class="snip-desc">Snippet obrigatório para ativar o GTM. Cole o mais alto possível dentro do &lt;head&gt;.</div>
+      <button class="copy-btn" onclick="copySnip(this)">Copiar</button>
+      <pre class="code-block"><!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','{{ ap.gtm or "GTM-XXXXXXX" }}');</script>
+<!-- End Google Tag Manager --></pre>
+    </div>
+  </div>
+
+  {# GTM Body #}
+  <div class="snip-card">
+    <div class="snip-head">
+      <div>
+        <div class="snip-title">GTM — Snippet do &lt;body&gt; (noscript)</div>
+        <div class="snip-meta" style="margin-top:0.3rem;">
+          <span class="snip-where">Cole após abertura de &lt;body&gt;</span>
+          <span class="platform-badge pb-gtm">GTM</span>
+        </div>
+      </div>
+    </div>
+    <div class="snip-body">
+      <div class="snip-desc">Fallback para browsers sem JavaScript. Obrigatório para compliance completo do GTM.</div>
+      <button class="copy-btn" onclick="copySnip(this)">Copiar</button>
+      <pre class="code-block"><!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id={{ ap.gtm or 'GTM-XXXXXXX' }}"
+height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) --></pre>
+    </div>
+  </div>
+
+  <div class="section-heading">Meta Pixel</div>
+
+  <div class="snip-card">
+    <div class="snip-head">
+      <div>
+        <div class="snip-title">Meta Pixel — Base Code</div>
+        <div class="snip-meta" style="margin-top:0.3rem;">
+          <span class="snip-where">Via GTM (HTML tag) ou direto no &lt;head&gt;</span>
+          <span class="platform-badge pb-meta">Meta</span>
+          <span class="platform-badge pb-all">Todas as páginas</span>
+        </div>
+      </div>
+    </div>
+    <div class="snip-body">
+      <div class="snip-desc">Inicializa o pixel e dispara PageView. Se usar GTM, crie uma Custom HTML tag com trigger All Pages.</div>
+      <button class="copy-btn" onclick="copySnip(this)">Copiar</button>
+      <pre class="code-block"><script>
+!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
+document,'script','https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', '{{ ap.meta or "SEU_PIXEL_ID" }}');
+fbq('track', 'PageView');
+</script>
+<noscript>
+  <img height="1" width="1" style="display:none"
+    src="https://www.facebook.com/tr?id={{ ap.meta or "SEU_PIXEL_ID" }}&ev=PageView&noscript=1"/>
+</noscript></pre>
+    </div>
+  </div>
+
+  <div class="section-heading">Google Analytics 4</div>
+
+  <div class="snip-card">
+    <div class="snip-head">
+      <div>
+        <div class="snip-title">GA4 — Tag direta (sem GTM)</div>
+        <div class="snip-meta" style="margin-top:0.3rem;">
+          <span class="snip-where">Cole no &lt;head&gt; se não usar GTM</span>
+          <span class="platform-badge pb-ga4">GA4</span>
+        </div>
+      </div>
+    </div>
+    <div class="snip-body">
+      <div class="snip-desc">Se já usa GTM, configure GA4 por lá. Este snippet é apenas para instalação direta sem GTM.</div>
+      <button class="copy-btn" onclick="copySnip(this)">Copiar</button>
+      <pre class="code-block"><!-- Google Analytics 4 -->
+<script async src="https://www.googletagmanager.com/gtag/js?id={{ ap.ga4 or 'G-XXXXXXXXXX' }}"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', '{{ ap.ga4 or "G-XXXXXXXXXX" }}', {
+    send_page_view: true
+  });
+</script></pre>
+    </div>
+  </div>
+
+  <div class="section-heading">LinkedIn, TikTok & HubSpot</div>
+
+  <div class="snip-card">
+    <div class="snip-head">
+      <div>
+        <div class="snip-title">LinkedIn Insight Tag</div>
+        <div class="snip-meta" style="margin-top:0.3rem;">
+          <span class="snip-where">Via GTM ou &lt;head&gt;</span>
+          <span class="platform-badge pb-li">LinkedIn</span>
+        </div>
+      </div>
+    </div>
+    <div class="snip-body">
+      <button class="copy-btn" onclick="copySnip(this)">Copiar</button>
+      <pre class="code-block"><script type="text/javascript">
+_linkedin_partner_id = "{{ ap.li or 'SEU_PARTNER_ID' }}";
+window._linkedin_data_partner_ids = window._linkedin_data_partner_ids || [];
+window._linkedin_data_partner_ids.push(_linkedin_partner_id);
+</script>
+<script type="text/javascript">
+(function(l){if(!l){window.lintrk=function(a,b){window.lintrk.q.push([a,b])};
+window.lintrk.q=[]}var s=document.getElementsByTagName("script")[0];
+var b=document.createElement("script");b.type="text/javascript";b.async=true;
+b.src="https://snap.licdn.com/li.lms-analytics/insight.min.js";
+s.parentNode.insertBefore(b,s)})(window.lintrk);
+</script>
+<noscript>
+  <img height="1" width="1" style="display:none;" alt=""
+    src="https://px.ads.linkedin.com/collect/?pid={{ ap.li or 'SEU_PARTNER_ID' }}&fmt=gif" />
+</noscript></pre>
+    </div>
+  </div>
+
+  <div class="snip-card">
+    <div class="snip-head">
+      <div>
+        <div class="snip-title">TikTok Pixel — Base Code</div>
+        <div class="snip-meta" style="margin-top:0.3rem;">
+          <span class="snip-where">Via GTM ou &lt;head&gt;</span>
+          <span class="platform-badge pb-tt">TikTok</span>
+        </div>
+      </div>
+    </div>
+    <div class="snip-body">
+      <button class="copy-btn" onclick="copySnip(this)">Copiar</button>
+      <pre class="code-block"><script>
+!function(w,d,t){w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];
+ttq.methods=["page","track","identify","instances","debug","on","off","once","ready",
+  "alias","group","enableCookie","disableCookie"];
+ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};
+for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);
+ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)
+  ttq.setAndDefer(e,ttq.methods[n]);return e};
+ttq.load=function(e,n){var i="https://analytics.tiktok.com/i18n/pixel/events.js";
+  ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=i,ttq._t=ttq._t||{},
+  ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n||{};
+  var o=document.createElement("script");
+  o.type="text/javascript",o.async=!0,o.src=i+"?sdkid="+e+"&lib="+t;
+  var a=document.getElementsByTagName("script")[0];a.parentNode.insertBefore(o,a)};
+ttq.load('{{ ap.tt or "SEU_PIXEL_TIKTOK" }}');
+ttq.page();
+}(window,document,'ttq');
+</script></pre>
+    </div>
+  </div>
+
+  <div class="snip-card">
+    <div class="snip-head">
+      <div>
+        <div class="snip-title">HubSpot Tracking Code</div>
+        <div class="snip-meta" style="margin-top:0.3rem;">
+          <span class="snip-where">Cole antes de &lt;/body&gt;</span>
+          <span class="platform-badge pb-hs">HubSpot</span>
+        </div>
+      </div>
+    </div>
+    <div class="snip-body">
+      <div class="snip-desc">Habilita o tracking do HubSpot (Analytics + Forms). Necessário para capturar submissões de formulário e ativar o chat.</div>
+      <button class="copy-btn" onclick="copySnip(this)">Copiar</button>
+      <pre class="code-block"><!-- HubSpot Tracking Code -->
+<script type="text/javascript" id="hs-script-loader" async defer
+  src="//js.hs-scripts.com/{{ ap.hs or 'SEU_PORTAL_ID' }}.js">
+</script></pre>
+    </div>
+  </div>
+
+</div>{# /panel-base #}
+
+
+{# ══════════════════════════════════════════════════════════════════════════
+   TAB 2 — UTM & ATRIBUIÇÃO
+══════════════════════════════════════════════════════════════════════════ #}
+<div id="panel-utm" class="track-panel">
+
+  <div class="section-heading">Captura & Persistência</div>
+
+  <div class="snip-card">
+    <div class="snip-head">
+      <div>
+        <div class="snip-title">UTM Engine — Captura, cookies e multi-touch</div>
+        <div class="snip-meta" style="margin-top:0.3rem;">
+          <span class="snip-where">Cole no &lt;head&gt; — antes de qualquer pixel</span>
+          <span class="platform-badge pb-all">Todas as plataformas</span>
+          <span class="platform-badge pb-hs">HubSpot</span>
+          <span class="platform-badge pb-gtm">GTM</span>
+        </div>
+      </div>
+    </div>
+    <div class="snip-body">
+      <div class="snip-desc">Engine completo de atribuição: captura UTMs na chegada, persiste em localStorage (first-touch e last-touch) e cookie de 30 dias, e empurra para o dataLayer. Compatível com iOS/Safari via cookies de 1ª parte.</div>
+      <button class="copy-btn" onclick="copySnip(this)">Copiar</button>
+      <pre class="code-block"><script>
+(function(){
+  var UTM_KEYS = ['utm_source','utm_medium','utm_campaign','utm_content','utm_term','gclid','fbclid'];
+  var COOKIE_DAYS = 30;
+  var NS = 'ixc_';
+
+  function parseUtms() {
+    var p = new URLSearchParams(window.location.search), d = {}, found = false;
+    UTM_KEYS.forEach(function(k){ var v=p.get(k); if(v){ d[k]=v; found=true; } });
+    return found ? d : null;
+  }
+
+  function setCookie(name, val, days) {
+    var exp = new Date(); exp.setDate(exp.getDate()+days);
+    document.cookie = name+'='+encodeURIComponent(JSON.stringify(val))+
+      ';expires='+exp.toUTCString()+';path=/;SameSite=Lax';
+  }
+
+  function getCookie(name) {
+    var m = document.cookie.match(new RegExp('(?:^|; )'+name+'=([^;]*)'));
+    try { return m ? JSON.parse(decodeURIComponent(m[1])) : null; } catch(e){ return null; }
+  }
+
+  function readLS(key) {
+    try { return JSON.parse(localStorage.getItem(NS+key)||'null'); } catch(e){ return null; }
+  }
+
+  function writeLS(key, val) {
+    try { localStorage.setItem(NS+key, JSON.stringify(val)); } catch(e){}
+  }
+
+  var utms = parseUtms();
+  if (utms) {
+    // Last-touch: sempre atualiza
+    writeLS('utm_last', utms);
+    setCookie(NS+'utm_last', utms, COOKIE_DAYS);
+    // First-touch: só grava se ainda não existe
+    if (!readLS('utm_first')) {
+      writeLS('utm_first', utms);
+      setCookie(NS+'utm_first', utms, 365);
+    }
+    // dataLayer push
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push(Object.assign({ event: 'utm_captured', touch: 'last' }, utms));
+  }
+
+  // Expõe helpers globais para uso em formulários
+  window.IXC = window.IXC || {};
+  window.IXC.getUtmLast  = function(){ return readLS('utm_last')  || getCookie(NS+'utm_last')  || {}; };
+  window.IXC.getUtmFirst = function(){ return readLS('utm_first') || getCookie(NS+'utm_first') || {}; };
+  window.IXC.getAttribution = function() {
+    return { first: window.IXC.getUtmFirst(), last: window.IXC.getUtmLast() };
+  };
+})();
+</script></pre>
+    </div>
+  </div>
+
+  <div class="snip-card">
+    <div class="snip-head">
+      <div>
+        <div class="snip-title">Injeção automática em campos ocultos de formulário</div>
+        <div class="snip-meta" style="margin-top:0.3rem;">
+          <span class="snip-where">Cole após o UTM Engine, antes de &lt;/body&gt;</span>
+          <span class="platform-badge pb-hs">HubSpot Forms</span>
+          <span class="platform-badge pb-all">Formulários genéricos</span>
+        </div>
+      </div>
+    </div>
+    <div class="snip-body">
+      <div class="snip-desc">Injeta automaticamente UTMs nos campos ocultos de qualquer formulário da página — incluindo HubSpot Embed Forms. Adicione campos hidden com os nomes correspondentes no seu formulário.</div>
+      <button class="copy-btn" onclick="copySnip(this)">Copiar</button>
+      <pre class="code-block"><script>
+(function(){
+  function fillFormUtms(form) {
+    if (!window.IXC) return;
+    var utms = window.IXC.getUtmLast();
+    Object.keys(utms).forEach(function(k){
+      var el = form.querySelector('input[name="'+k+'"]');
+      if (el) el.value = utms[k];
+    });
+    // Também preenche first-touch se campos existirem
+    var first = window.IXC.getUtmFirst();
+    ['utm_source','utm_medium','utm_campaign'].forEach(function(k){
+      var el = form.querySelector('input[name="first_'+k+'"]');
+      if (el && first[k]) el.value = first[k];
+    });
+  }
+
+  // Formulários nativos
+  document.querySelectorAll('form').forEach(fillFormUtms);
+
+  // HubSpot Embed Forms (disparam evento postMessage)
+  window.addEventListener('message', function(e){
+    if (e.data.type === 'hsFormCallback' && e.data.eventName === 'onFormReady') {
+      var iframes = document.querySelectorAll('iframe.hs-form-iframe');
+      iframes.forEach(function(iframe){
+        try {
+          iframe.contentDocument.querySelectorAll('form').forEach(fillFormUtms);
+        } catch(err){}
+      });
+    }
+  });
+
+  // Observer para formulários carregados dinamicamente
+  var mo = new MutationObserver(function(muts){
+    muts.forEach(function(m){
+      m.addedNodes.forEach(function(n){
+        if (n.nodeName === 'FORM') fillFormUtms(n);
+        if (n.querySelectorAll) n.querySelectorAll('form').forEach(fillFormUtms);
+      });
+    });
+  });
+  mo.observe(document.body, { childList:true, subtree:true });
+})();
+</script></pre>
+    </div>
+  </div>
+
+  <div class="snip-card">
+    <div class="snip-head">
+      <div>
+        <div class="snip-title">Variável JavaScript para GTM — lê UTMs salvos</div>
+        <div class="snip-meta" style="margin-top:0.3rem;">
+          <span class="snip-where">Criar como "Custom JavaScript Variable" no GTM</span>
+          <span class="platform-badge pb-gtm">GTM</span>
+        </div>
+      </div>
+    </div>
+    <div class="snip-body">
+      <div class="snip-desc">Crie 10 variáveis Custom JS no GTM (uma por UTM, first e last touch). Use em tags Meta Pixel Lead, GA4 events, etc.</div>
+      <button class="copy-btn" onclick="copySnip(this)">Copiar</button>
+      <pre class="code-block">// Variável: CJS - utm_campaign (last touch)
+function() {
+  try {
+    var d = JSON.parse(localStorage.getItem('ixc_utm_last') || '{}');
+    return d.utm_campaign || '';
+  } catch(e) { return ''; }
+}
+
+// ─── Repita para: utm_source, utm_medium, utm_content, utm_term ───
+
+// Variável: CJS - utm_campaign (first touch)
+function() {
+  try {
+    var d = JSON.parse(localStorage.getItem('ixc_utm_first') || '{}');
+    return d.utm_campaign || '';
+  } catch(e) { return ''; }
+}</pre>
+    </div>
+  </div>
+
+</div>{# /panel-utm #}
+
+
+{# ══════════════════════════════════════════════════════════════════════════
+   TAB 3 — EVENTOS & DATALAYER
+══════════════════════════════════════════════════════════════════════════ #}
+<div id="panel-events" class="track-panel">
+
+  <div class="section-heading">Eventos de Conversão</div>
+
+  <div class="snip-card">
+    <div class="snip-head">
+      <div>
+        <div class="snip-title">Lead / Form Submit — disparo unificado</div>
+        <div class="snip-meta" style="margin-top:0.3rem;">
+          <span class="snip-where">Cole na página de thank-you ou no submit do form</span>
+          <span class="platform-badge pb-all">Todas as plataformas</span>
+        </div>
+      </div>
+    </div>
+    <div class="snip-body">
+      <div class="snip-desc">Um único push no dataLayer dispara para todos os pixels via GTM. Inclui UTMs automaticamente do UTM Engine.</div>
+      <button class="copy-btn" onclick="copySnip(this)">Copiar</button>
+      <pre class="code-block"><script>
+window.dataLayer = window.dataLayer || [];
+var _utms = (window.IXC && window.IXC.getUtmLast()) || {};
+
+window.dataLayer.push({
+  event: 'generate_lead',
+  // Dados do lead (preencha dinamicamente)
+  lead_email:    '',          // ex: document.getElementById('email').value
+  lead_phone:    '',
+  lead_name:     '',
+  // UTMs (preenchidos automaticamente pelo UTM Engine)
+  utm_source:    _utms.utm_source   || '',
+  utm_medium:    _utms.utm_medium   || '',
+  utm_campaign:  _utms.utm_campaign || '',
+  utm_content:   _utms.utm_content  || '',
+  utm_term:      _utms.utm_term     || '',
+  // Contexto
+  form_id:       'form-principal',
+  page_url:      window.location.href,
+  value:         0,           // valor do lead em R$ (use 0 se não souber)
+  currency:      'BRL',
+});
+</script></pre>
+    </div>
+  </div>
+
+  <div class="snip-card">
+    <div class="snip-head">
+      <div>
+        <div class="snip-title">Scroll Depth — 25%, 50%, 75%, 100%</div>
+        <div class="snip-meta" style="margin-top:0.3rem;">
+          <span class="snip-where">Cole antes de &lt;/body&gt; em landing pages</span>
+          <span class="platform-badge pb-gtm">GTM</span>
+          <span class="platform-badge pb-ga4">GA4</span>
+        </div>
+      </div>
+    </div>
+    <div class="snip-body">
+      <div class="snip-desc">Mede engajamento real com a LP. Dados essenciais para otimizar criativos e analisar qualidade do tráfego.</div>
+      <button class="copy-btn" onclick="copySnip(this)">Copiar</button>
+      <pre class="code-block"><script>
+(function(){
+  var fired = {};
+  var milestones = [25, 50, 75, 100];
+
+  function getScrollPct() {
+    var h = document.documentElement;
+    return Math.round((h.scrollTop || document.body.scrollTop) /
+      ((h.scrollHeight || document.body.scrollHeight) - h.clientHeight) * 100);
+  }
+
+  function onScroll() {
+    var pct = getScrollPct();
+    milestones.forEach(function(m){
+      if (pct >= m && !fired[m]) {
+        fired[m] = true;
+        window.dataLayer = window.dataLayer || [];
+        window.dataLayer.push({
+          event: 'scroll_depth',
+          scroll_threshold: m,
+          scroll_units: 'percent',
+          page_url: window.location.href,
+        });
+      }
+    });
+  }
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+})();
+</script></pre>
+    </div>
+  </div>
+
+  <div class="snip-card">
+    <div class="snip-head">
+      <div>
+        <div class="snip-title">Tempo na página — 15s, 30s, 60s, 2min, 5min</div>
+        <div class="snip-meta" style="margin-top:0.3rem;">
+          <span class="snip-where">Cole antes de &lt;/body&gt;</span>
+          <span class="platform-badge pb-gtm">GTM</span>
+          <span class="platform-badge pb-ga4">GA4</span>
+        </div>
+      </div>
+    </div>
+    <div class="snip-body">
+      <div class="snip-desc">Mede engajamento temporal. Audiências de remarketing baseadas em tempo geram CAC mais baixo.</div>
+      <button class="copy-btn" onclick="copySnip(this)">Copiar</button>
+      <pre class="code-block"><script>
+(function(){
+  var milestones = [15, 30, 60, 120, 300]; // segundos
+  milestones.forEach(function(sec){
+    setTimeout(function(){
+      window.dataLayer = window.dataLayer || [];
+      window.dataLayer.push({
+        event: 'time_on_page',
+        engagement_time_sec: sec,
+        page_url: window.location.href,
+      });
+    }, sec * 1000);
+  });
+})();
+</script></pre>
+    </div>
+  </div>
+
+  <div class="snip-card">
+    <div class="snip-head">
+      <div>
+        <div class="snip-title">CTA Click — rastreia todos os botões</div>
+        <div class="snip-meta" style="margin-top:0.3rem;">
+          <span class="snip-where">Cole antes de &lt;/body&gt;</span>
+          <span class="platform-badge pb-gtm">GTM</span>
+          <span class="platform-badge pb-ga4">GA4</span>
+          <span class="platform-badge pb-meta">Meta</span>
+        </div>
+      </div>
+    </div>
+    <div class="snip-body">
+      <div class="snip-desc">Registra cliques em CTAs automaticamente. Adicione <code>data-cta="nome-do-cta"</code> nos botões para identificar cada um.</div>
+      <button class="copy-btn" onclick="copySnip(this)">Copiar</button>
+      <pre class="code-block"><script>
+document.addEventListener('click', function(e){
+  var btn = e.target.closest('[data-cta], button, a[href^="#"], .btn-cta');
+  if (!btn) return;
+  window.dataLayer = window.dataLayer || [];
+  window.dataLayer.push({
+    event: 'cta_click',
+    cta_text:     btn.textContent.trim().slice(0,100),
+    cta_id:       btn.getAttribute('data-cta') || btn.id || '',
+    cta_location: btn.closest('[data-section]')?.getAttribute('data-section') || '',
+    page_url:     window.location.href,
+  });
+});
+</script></pre>
+    </div>
+  </div>
+
+  <div class="snip-card">
+    <div class="snip-head">
+      <div>
+        <div class="snip-title">Video Engagement — YouTube + nativo HTML5</div>
+        <div class="snip-meta" style="margin-top:0.3rem;">
+          <span class="snip-where">Cole antes de &lt;/body&gt; em páginas com vídeo</span>
+          <span class="platform-badge pb-ga4">GA4</span>
+          <span class="platform-badge pb-meta">Meta</span>
+        </div>
+      </div>
+    </div>
+    <div class="snip-body">
+      <button class="copy-btn" onclick="copySnip(this)">Copiar</button>
+      <pre class="code-block"><script>
+(function(){
+  // HTML5 Video
+  document.querySelectorAll('video').forEach(function(v, i){
+    var fired = {};
+    var thresholds = [25, 50, 75, 100];
+
+    v.addEventListener('play', function(){
+      window.dataLayer = window.dataLayer || [];
+      window.dataLayer.push({ event:'video_start', video_title: v.title||'video_'+i });
+    });
+
+    v.addEventListener('timeupdate', function(){
+      if (!v.duration) return;
+      var pct = Math.round(v.currentTime / v.duration * 100);
+      thresholds.forEach(function(t){
+        if (pct >= t && !fired[t]) {
+          fired[t] = true;
+          window.dataLayer.push({
+            event: 'video_progress',
+            video_title: v.title || 'video_'+i,
+            video_percent: t,
+          });
+        }
+      });
+    });
+
+    v.addEventListener('ended', function(){
+      window.dataLayer.push({ event:'video_complete', video_title: v.title||'video_'+i });
+    });
+  });
+})();
+</script></pre>
+    </div>
+  </div>
+
+  <div class="snip-card">
+    <div class="snip-head">
+      <div>
+        <div class="snip-title">Exit Intent — usuário movendo o mouse para sair</div>
+        <div class="snip-meta" style="margin-top:0.3rem;">
+          <span class="snip-where">Cole antes de &lt;/body&gt; em landing pages</span>
+          <span class="platform-badge pb-meta">Meta</span>
+          <span class="platform-badge pb-ga4">GA4</span>
+        </div>
+      </div>
+    </div>
+    <div class="snip-body">
+      <div class="snip-desc">Detecta intenção de saída e dispara evento. Use para acionar pop-up de oferta ou criar audiência de retargeting de alta intenção.</div>
+      <button class="copy-btn" onclick="copySnip(this)">Copiar</button>
+      <pre class="code-block"><script>
+(function(){
+  var fired = false;
+  document.addEventListener('mouseleave', function(e){
+    if (fired || e.clientY > 20) return;
+    fired = true;
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({
+      event: 'exit_intent',
+      page_url: window.location.href,
+      time_on_page_sec: Math.round(performance.now() / 1000),
+    });
+  });
+})();
+</script></pre>
+    </div>
+  </div>
+
+</div>{# /panel-events #}
+
+
+{# ══════════════════════════════════════════════════════════════════════════
+   TAB 4 — CAPI & SERVER-SIDE
+══════════════════════════════════════════════════════════════════════════ #}
+<div id="panel-capi" class="track-panel">
+
+  <div class="section-heading">Meta Conversions API (CAPI)</div>
+
+  <div class="snip-card">
+    <div class="snip-head">
+      <div>
+        <div class="snip-title">Meta CAPI — payload Python (backend)</div>
+        <div class="snip-meta" style="margin-top:0.3rem;">
+          <span class="snip-where">Execute no servidor no momento da conversão</span>
+          <span class="platform-badge pb-meta">Meta CAPI</span>
+        </div>
+      </div>
+    </div>
+    <div class="snip-body">
+      <div class="snip-desc">Envio server-side para a CAPI do Meta. Contorna iOS/bloqueadores. Use em paralelo ao pixel client-side com <code>event_id</code> igual para deduplicação automática.</div>
+      <button class="copy-btn" onclick="copySnip(this)">Copiar</button>
+      <pre class="code-block">import hashlib, time, uuid, requests, os
+
+def sha256(value: str) -> str:
+    return hashlib.sha256(value.strip().lower().encode()).hexdigest()
+
+def send_capi_lead(
+    email: str,
+    phone: str = "",
+    first_name: str = "",
+    utm_campaign: str = "",
+    utm_source: str = "",
+    client_ip: str = "",
+    client_ua: str = "",
+    event_source_url: str = "",
+):
+    pixel_id    = "{{ ap.meta or 'SEU_PIXEL_ID' }}"
+    access_token = os.getenv("META_ACCESS_TOKEN")
+    event_id    = str(uuid.uuid4())
+
+    user_data = {"em": sha256(email)}
+    if phone:      user_data["ph"] = sha256(phone)
+    if first_name: user_data["fn"] = sha256(first_name)
+    if client_ip:  user_data["client_ip_address"] = client_ip
+    if client_ua:  user_data["client_user_agent"]  = client_ua
+
+    payload = {
+        "data": [{
+            "event_name": "Lead",
+            "event_time": int(time.time()),
+            "event_id":   event_id,    # igual ao event_id do pixel client-side
+            "event_source_url": event_source_url,
+            "action_source": "website",
+            "user_data": user_data,
+            "custom_data": {
+                "utm_campaign": utm_campaign,
+                "utm_source":   utm_source,
+                "currency": "BRL",
+                "value": 0,
+            },
+        }],
+        "test_event_code": "",  # remova em produção
+    }
+
+    r = requests.post(
+        f"https://graph.facebook.com/v19.0/{pixel_id}/events",
+        params={"access_token": access_token},
+        json=payload,
+        timeout=10,
+    )
+    r.raise_for_status()
+    return {"event_id": event_id, "result": r.json()}
+</pre>
+    </div>
+  </div>
+
+  <div class="snip-card">
+    <div class="snip-head">
+      <div>
+        <div class="snip-title">Deduplicação CAPI + Pixel — event_id compartilhado</div>
+        <div class="snip-meta" style="margin-top:0.3rem;">
+          <span class="snip-where">Frontend + Backend em conjunto</span>
+          <span class="platform-badge pb-meta">Meta CAPI</span>
+        </div>
+      </div>
+    </div>
+    <div class="snip-body">
+      <div class="snip-desc">Para não duplicar conversões, o <code>event_id</code> deve ser gerado no frontend e enviado tanto para o pixel (client-side) quanto para a CAPI (server-side).</div>
+      <button class="copy-btn" onclick="copySnip(this)">Copiar</button>
+      <pre class="code-block">// 1. Frontend: gera event_id e dispara pixel
+var eventId = crypto.randomUUID ? crypto.randomUUID()
+            : Math.random().toString(36).slice(2)+Date.now();
+
+fbq('track', 'Lead', { value: 0, currency: 'BRL' }, { eventID: eventId });
+
+// 2. Frontend: envia event_id para o backend via fetch
+fetch('/api/capi/lead', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    event_id:     eventId,
+    email:        document.getElementById('email')?.value || '',
+    utm_campaign: window.IXC?.getUtmLast()?.utm_campaign || '',
+    utm_source:   window.IXC?.getUtmLast()?.utm_source   || '',
+    page_url:     window.location.href,
+  }),
+});
+
+// 3. Backend: usa o event_id recebido no campo event_id do payload CAPI
+//    (veja snippet Python acima — passe event_id como parâmetro)</pre>
+    </div>
+  </div>
+
+  <div class="section-heading">Google Enhanced Conversions</div>
+
+  <div class="snip-card">
+    <div class="snip-head">
+      <div>
+        <div class="snip-title">Google Ads — Enhanced Conversions (gtag)</div>
+        <div class="snip-meta" style="margin-top:0.3rem;">
+          <span class="snip-where">Cole na página de thank-you / conversão</span>
+          <span class="platform-badge pb-ga4">Google Ads</span>
+        </div>
+      </div>
+    </div>
+    <div class="snip-body">
+      <div class="snip-desc">Enhanced Conversions melhora a atribuição no Google Ads enviando dados hasheados do usuário junto com a conversão. Ative Enhanced Conversions no painel do Google Ads antes de usar.</div>
+      <button class="copy-btn" onclick="copySnip(this)">Copiar</button>
+      <pre class="code-block"><script>
+// Dados do usuário — preencha no servidor ou após submit
+gtag('set', 'user_data', {
+  email:      '',   // ex: '{{ lead_email }}'
+  phone_number: '', // formato internacional: +5511999999999
+  address: {
+    first_name: '',
+    last_name:  '',
+    country:    'BR',
+    region:     '',  // estado
+    postal_code: '',
+  }
+});
+
+// Disparo da conversão
+gtag('event', 'conversion', {
+  send_to: 'AW-CONVERSION_ID/CONVERSION_LABEL',
+  value:   0,
+  currency: 'BRL',
+  transaction_id: '',  // ID único para deduplicação
+});
+</script></pre>
+    </div>
+  </div>
+
+  <div class="section-heading">Arquitetura Server-Side GTM</div>
+
+  <div class="snip-card">
+    <div class="snip-head">
+      <div>
+        <div class="snip-title">Arquitetura SST — Server-Side Tagging</div>
+        <div class="snip-meta" style="margin-top:0.3rem;">
+          <span class="snip-where">Referência de arquitetura</span>
+          <span class="platform-badge pb-gtm">GTM SS</span>
+          <span class="platform-badge pb-all">Todas as plataformas</span>
+        </div>
+      </div>
+    </div>
+    <div class="snip-body">
+      <div class="snip-desc">O GTM Server-Side roteia todos os eventos pelo seu servidor, garantindo cookies de 1ª parte, melhor match rate na CAPI e dados sem bloqueadores.</div>
+      <button class="copy-btn" onclick="copySnip(this)">Copiar</button>
+      <pre class="code-block"># Fluxo de dados — Server-Side Tagging
+
+Browser                    GTM Web Container        GTM Server Container      Plataformas
+  │                              │                         │                      │
+  ├─ PageView ──────────────────►│                         │                      │
+  │                              ├─ GA4 event ────────────►│                      │
+  │                              │  (transport_url=sst)    ├─ GA4 ───────────────►│
+  │                              │                         ├─ Meta CAPI ─────────►│
+  ├─ generate_lead ─────────────►│                         ├─ Google Ads ────────►│
+  │  (event_id incluído)         ├─ GA4 event ────────────►├─ LinkedIn ──────────►│
+  │                              │                         └─ TikTok ────────────►│
+  │                              │
+  │   Cookies set via            │
+  │   Set-Cookie (1ª parte) ◄────┘
+  │   → duram 400 dias
+  │   → funcionam no Safari/iOS
+
+# Onde hospedar o servidor GTM:
+# - Google App Engine (recomendado): deploy via gcloud
+# - Cloud Run: containerizado
+# - Stape.io: SaaS gerenciado (mais fácil)
+
+# URL do servidor (configure em GTM Web → GA4 Config → transport_url):
+# https://sst.seudominio.com.br</pre>
+    </div>
+  </div>
+
+</div>{# /panel-capi #}
+
+
+{# ══════════════════════════════════════════════════════════════════════════
+   TAB 5 — PLANO DE MEDIÇÃO
+══════════════════════════════════════════════════════════════════════════ #}
+<div id="panel-plan" class="track-panel">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+    <div>
+      <div class="section-heading" style="margin:0;">Plano de Medição — Eventos × Plataformas</div>
+      <p style="font-size:0.8rem;color:var(--muted);margin:0.3rem 0 0;">Mapa completo de todos os eventos de rastreamento e onde cada um é coletado.</p>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="exportMeasurementPlan()">⬇ Exportar CSV</button>
+  </div>
+
+  <div class="table-wrap">
+    <table class="mp-table">
+      <thead>
+        <tr>
+          <th>Evento</th>
+          <th>Trigger</th>
+          <th style="text-align:center;">GTM</th>
+          <th style="text-align:center;">GA4</th>
+          <th style="text-align:center;">Meta</th>
+          <th style="text-align:center;">G.Ads</th>
+          <th style="text-align:center;">LinkedIn</th>
+          <th style="text-align:center;">TikTok</th>
+          <th style="text-align:center;">HubSpot</th>
+          <th>Parâmetros-chave</th>
+        </tr>
+      </thead>
+      <tbody id="mp-tbody">
+        {%- set events = [
+          ('page_view',       'Todas as páginas',              True, True, True, False, True, True, True,  'page_url, utm_*'),
+          ('utm_captured',    'UTMs na URL',                   True, True, False,False, False,False,True,  'utm_source, utm_medium, utm_campaign'),
+          ('generate_lead',   'Submit de formulário',          True, True, True, True,  True, True, True,  'email, utm_*, form_id, value'),
+          ('scroll_depth',    'Scroll 25/50/75/100%',          True, True, False,False, False,False,False, 'scroll_threshold, page_url'),
+          ('time_on_page',    'Tempo 15/30/60/120/300s',       True, True, False,False, False,False,False, 'engagement_time_sec'),
+          ('cta_click',       'Clique em botão CTA',           True, True, False,False, False,False,False, 'cta_text, cta_id, cta_location'),
+          ('video_start',     'Play de vídeo',                 True, True, True, False, False,True, False, 'video_title'),
+          ('video_progress',  'Vídeo 25/50/75/100%',          True, True, False,False, False,True, False, 'video_title, video_percent'),
+          ('video_complete',  'Vídeo assistido até o fim',     True, True, True, False, False,True, False, 'video_title'),
+          ('exit_intent',     'Mouse saindo pelo topo',        True, True, True, False, False,False,False, 'page_url, time_on_page_sec'),
+          ('purchase',        'Compra confirmada',             True, True, True, True,  True, True, True,  'value, currency, transaction_id, utm_*'),
+          ('add_to_cart',     'Adicionar ao carrinho',         True, True, True, False, False,True, False, 'product_id, value, currency'),
+          ('view_content',    'Visualização de oferta/produto',True, True, True, False, False,True, False, 'page_url, content_name'),
+          ('initiate_checkout','Início de checkout',           True, True, True, True,  False,True, False, 'value, currency, utm_*'),
+          ('contact',         'Clique em WhatsApp/telefone',   True, True, True, False, False,False,False, 'contact_method, contact_value'),
+        ] -%}
+        {% for ev, trigger, gtm, ga4, meta, gads, li, tt, hs, params in events %}
+        <tr>
+          <td style="font-family:monospace;font-size:0.78rem;font-weight:600;">{{ ev }}</td>
+          <td style="font-size:0.78rem;">{{ trigger }}</td>
+          {% for v in [gtm, ga4, meta, gads, li, tt, hs] %}
+          <td style="text-align:center;">
+            {% if v %}<span class="check">✓</span>{% else %}<span class="dash">—</span>{% endif %}
+          </td>
+          {% endfor %}
+          <td style="font-family:monospace;font-size:0.72rem;color:var(--muted);">{{ params }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div style="margin-top:1.5rem;" class="section-heading">Configurações GTM recomendadas</div>
+  <div class="table-wrap">
+    <table class="mp-table">
+      <thead>
+        <tr><th>Elemento GTM</th><th>Tipo</th><th>Configuração</th></tr>
+      </thead>
+      <tbody>
+        {%- set gtm_items = [
+          ('DLV - utm_source',    'Data Layer Variable', 'variável: utm_source'),
+          ('DLV - utm_medium',    'Data Layer Variable', 'variável: utm_medium'),
+          ('DLV - utm_campaign',  'Data Layer Variable', 'variável: utm_campaign'),
+          ('DLV - utm_content',   'Data Layer Variable', 'variável: utm_content'),
+          ('DLV - utm_term',      'Data Layer Variable', 'variável: utm_term'),
+          ('CJS - utm_last',      'Custom JavaScript',   'lê ixc_utm_last do localStorage'),
+          ('Trigger - All Pages', 'Page View',           'fire on all pages'),
+          ('Trigger - generate_lead', 'Custom Event',    'event name: generate_lead'),
+          ('Trigger - scroll_depth',  'Custom Event',    'event name: scroll_depth'),
+          ('Trigger - cta_click',     'Custom Event',    'event name: cta_click'),
+        ] -%}
+        {% for name, tipo, cfg in gtm_items %}
+        <tr>
+          <td style="font-family:monospace;font-size:0.78rem;">{{ name }}</td>
+          <td style="font-size:0.78rem;color:var(--muted);">{{ tipo }}</td>
+          <td style="font-size:0.78rem;">{{ cfg }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</div>{# /panel-plan #}
+
+
+{# ══════════════════════════════════════════════════════════════════════════
+   TAB 6 — TESTES & DIAGNÓSTICO
+══════════════════════════════════════════════════════════════════════════ #}
+<div id="panel-tests" class="track-panel">
+
+  <div class="test-grid">
+
+    <div class="test-card">
+      <h4>GTM Preview & Debug</h4>
+      <p>Abre o GTM em modo de preview para inspecionar eventos em tempo real no site.</p>
+      {% if ap.gtm %}
+      <div class="status-indicator si-ok" style="margin-bottom:0.75rem;">● Container configurado: {{ ap.gtm }}</div>
+      <a href="https://tagassistant.google.com/" target="_blank" class="btn btn-primary btn-sm">Abrir Tag Assistant →</a>
+      {% else %}
+      <div class="status-indicator si-na" style="margin-bottom:0.75rem;">○ GTM ID não configurado</div>
+      <a href="/conexoes" class="btn btn-ghost btn-sm">Configurar →</a>
+      {% endif %}
+    </div>
+
+    <div class="test-card">
+      <h4>Meta Pixel Helper</h4>
+      <p>Extensão do Chrome que mostra eventos do pixel em tempo real. Essencial para validar CAPI + Pixel.</p>
+      <div class="status-indicator {{ 'si-ok' if ap.meta else 'si-na' }}" style="margin-bottom:0.75rem;">
+        {{ '● Pixel configurado: ' + ap.meta if ap.meta else '○ Meta Pixel ID não configurado' }}
+      </div>
+      <a href="https://chrome.google.com/webstore/detail/meta-pixel-helper/fdgfkebogiimcoedlicjlajpkdmockpc" target="_blank" class="btn btn-primary btn-sm">Instalar extensão →</a>
+    </div>
+
+    <div class="test-card">
+      <h4>GA4 DebugView</h4>
+      <p>Visualiza eventos do GA4 em tempo real no Google Analytics. Ative o modo debug via extensão ou parâmetro.</p>
+      {% if ap.ga4 %}
+      <div class="status-indicator si-ok" style="margin-bottom:0.75rem;">● GA4 configurado: {{ ap.ga4 }}</div>
+      <a href="https://analytics.google.com" target="_blank" class="btn btn-primary btn-sm">Abrir GA4 →</a>
+      {% else %}
+      <div class="status-indicator si-na" style="margin-bottom:0.75rem;">○ GA4 ID não configurado</div>
+      <a href="/conexoes" class="btn btn-ghost btn-sm">Configurar →</a>
+      {% endif %}
+    </div>
+
+    <div class="test-card">
+      <h4>Meta Events Manager — Teste</h4>
+      <p>Envie um evento de teste direto para o Events Manager do Meta para validar a CAPI.</p>
+      {% if ap.meta %}
+      <div class="status-indicator si-ok" style="margin-bottom:0.75rem;">● Pixel: {{ ap.meta }}</div>
+      <a href="https://business.facebook.com/events_manager2/list/pixel/{{ ap.meta }}/test_events" target="_blank" class="btn btn-primary btn-sm">Abrir Events Manager →</a>
+      {% else %}
+      <div class="status-indicator si-na" style="margin-bottom:0.75rem;">○ Pixel ID não configurado</div>
+      {% endif %}
+    </div>
+
+    <div class="test-card">
+      <h4>Disparar evento de teste</h4>
+      <p>Envia um <code>generate_lead</code> de teste para o dataLayer e para todos os pixels configurados nesta aba.</p>
+      <button class="btn btn-primary btn-sm" onclick="fireTestEvent()">Disparar evento de teste</button>
+      <div id="test-event-log" style="margin-top:0.75rem;font-family:monospace;font-size:0.72rem;color:var(--muted);min-height:2rem;"></div>
+    </div>
+
+    <div class="test-card">
+      <h4>Validação de UTMs</h4>
+      <p>Testa se o UTM Engine está instalado e captura os valores armazenados nesta sessão.</p>
+      <button class="btn btn-ghost btn-sm" onclick="checkUtms()">Verificar UTMs</button>
+      <div id="utm-check-log" style="margin-top:0.75rem;font-family:monospace;font-size:0.72rem;color:var(--muted);min-height:2rem;"></div>
+    </div>
+
+    <div class="test-card">
+      <h4>Checklist de instalação</h4>
+      <div id="checklist" style="margin-top:0.5rem;"></div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:0.75rem;" onclick="runChecklist()">Rodar checklist</button>
+    </div>
+
+    <div class="test-card">
+      <h4>Snippet completo do produto</h4>
+      <p>Gera o snippet HTML completo com todos os pixels configurados para o produto ativo.</p>
+      {% if active_product %}
+      <button class="btn btn-primary btn-sm" onclick="loadProductSnippet()">Gerar snippet de {{ active_product }}</button>
+      <pre id="product-snippet" style="display:none;margin-top:0.75rem;font-size:0.72rem;background:rgba(0,0,0,.25);padding:0.75rem;border-radius:6px;overflow-x:auto;white-space:pre;"></pre>
+      {% else %}
+      <div class="status-indicator si-warn">⚠ Selecione um produto ativo no topo da tela</div>
+      {% endif %}
+    </div>
+
+  </div>
+
+</div>{# /panel-tests #}
+
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+// ── Tab switching ──────────────────────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.track-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.track-tab').forEach(b  => b.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── Copy snippet ───────────────────────────────────────────────────────────────
+function copySnip(btn) {
+  var pre = btn.closest('.snip-body').querySelector('pre');
+  navigator.clipboard.writeText(pre.textContent).then(function(){
+    btn.textContent = 'Copiado!';
+    btn.classList.add('copied');
+    setTimeout(function(){ btn.textContent = 'Copiar'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+// ── GTM Export ────────────────────────────────────────────────────────────────
+async function exportGTM() {
+  const product = '{{ active_product or "" }}';
+  const r = await fetch('/api/rastreamento/gtm-export?product=' + encodeURIComponent(product));
+  const data = await r.json();
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'ixctraffic_gtm_container.json'; a.click();
+  URL.revokeObjectURL(url);
+  showToast('Container GTM exportado! Importe em GTM → Admin → Import Container.');
+}
+
+// ── Measurement Plan CSV Export ───────────────────────────────────────────────
+function exportMeasurementPlan() {
+  var rows = [['Evento','Trigger','GTM','GA4','Meta','Google Ads','LinkedIn','TikTok','HubSpot','Parâmetros']];
+  document.querySelectorAll('#mp-tbody tr').forEach(function(tr){
+    var cells = Array.from(tr.querySelectorAll('td')).map(function(td){
+      return td.textContent.trim().replace(/\n/g,' ');
+    });
+    rows.push(cells);
+  });
+  var csv = rows.map(r => r.map(c => '"'+c.replace(/"/g,'""')+'"').join(',')).join('\n');
+  var blob = new Blob(['﻿'+csv], { type:'text/csv;charset=utf-8;' });
+  var url  = URL.createObjectURL(blob);
+  var a = document.createElement('a'); a.href=url; a.download='plano_medicao_ixctraffic.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Test event ────────────────────────────────────────────────────────────────
+function fireTestEvent() {
+  var log = document.getElementById('test-event-log');
+  var ts  = new Date().toLocaleTimeString('pt-BR');
+  window.dataLayer = window.dataLayer || [];
+  window.dataLayer.push({
+    event: 'generate_lead',
+    utm_source: 'test',
+    utm_medium: 'ixctraffic',
+    utm_campaign: 'tracking_test',
+    form_id: 'test_form',
+    value: 0, currency: 'BRL',
+  });
+  var lines = ['['+ts+'] generate_lead → dataLayer ✓'];
+
+  if (typeof fbq !== 'undefined') {
+    fbq('track','Lead',{value:0,currency:'BRL'});
+    lines.push('['+ts+'] Meta Pixel Lead ✓');
+  }
+  if (typeof ttq !== 'undefined') {
+    ttq.track('SubmitForm');
+    lines.push('['+ts+'] TikTok SubmitForm ✓');
+  }
+  if (typeof lintrk !== 'undefined') {
+    lintrk('track', { conversion_id: '' });
+    lines.push('['+ts+'] LinkedIn track ✓');
+  }
+  if (typeof gtag !== 'undefined') {
+    lines.push('['+ts+'] gtag disponível ✓');
+  }
+  log.style.color = '#00c864';
+  log.innerHTML = lines.map(l => '<div>'+l+'</div>').join('');
+}
+
+// ── UTM check ─────────────────────────────────────────────────────────────────
+function checkUtms() {
+  var log = document.getElementById('utm-check-log');
+  var lines = [];
+  if (window.IXC) {
+    var last  = window.IXC.getUtmLast();
+    var first = window.IXC.getUtmFirst();
+    lines.push('UTM Engine: ✓ instalado');
+    lines.push('Last touch: ' + (Object.keys(last).length  ? JSON.stringify(last)  : '(nenhum nesta sessão)'));
+    lines.push('First touch: '+ (Object.keys(first).length ? JSON.stringify(first) : '(nenhum)'));
+  } else {
+    lines.push('UTM Engine: ✗ não detectado nesta página');
+    lines.push('Instale o snippet "UTM Engine" na tab UTM & Atribuição.');
+  }
+  log.style.color = window.IXC ? '#00c864' : '#ffb400';
+  log.innerHTML = lines.map(l => '<div>'+l+'</div>').join('');
+}
+
+// ── Checklist ─────────────────────────────────────────────────────────────────
+function runChecklist() {
+  var checks = [
+    { label: 'GTM no head',       pass: typeof google_tag_manager !== 'undefined' || document.querySelector('script[src*="googletagmanager.com/gtm"]') !== null },
+    { label: 'dataLayer definido',pass: Array.isArray(window.dataLayer) },
+    { label: 'Meta Pixel',        pass: typeof fbq !== 'undefined' },
+    { label: 'GA4 / gtag',        pass: typeof gtag !== 'undefined' },
+    { label: 'LinkedIn Insight',  pass: typeof lintrk !== 'undefined' },
+    { label: 'TikTok Pixel',      pass: typeof ttq !== 'undefined' },
+    { label: 'UTM Engine (IXC)',  pass: typeof window.IXC !== 'undefined' },
+    { label: 'Cookies 1ª parte',  pass: document.cookie.indexOf('ixc_') !== -1 },
+  ];
+  var html = checks.map(function(c){
+    return '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.2rem 0;font-size:0.78rem;">'
+      + '<span style="color:'+(c.pass?'#00c864':'#ff6b6b')+';">'+(c.pass?'✓':'✗')+'</span>'
+      + '<span style="color:'+(c.pass?'var(--text)':'var(--muted)')+';">' + c.label + '</span>'
+      + '</div>';
+  }).join('');
+  document.getElementById('checklist').innerHTML = html;
+}
+
+// ── Product snippet loader ────────────────────────────────────────────────────
+async function loadProductSnippet() {
+  var product = '{{ active_product or "" }}';
+  if (!product) return;
+  var r = await fetch('/api/tracking/snippet/' + encodeURIComponent(product));
+  var html = await r.text();
+  var pre = document.getElementById('product-snippet');
+  pre.textContent = html;
+  pre.style.display = 'block';
+}
+</script>
+{% endblock %}

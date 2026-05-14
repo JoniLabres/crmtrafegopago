@@ -16,6 +16,8 @@ from dotenv import load_dotenv, set_key
 
 import config_store
 from config_store import get_db_url
+import auth as _auth
+import mailer as _mailer
 
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT / "tracking"))
@@ -31,6 +33,67 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="IXCTraffic", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+
+# ── Injeta current_user em todos os TemplateResponse automaticamente ─────────
+_orig_template_response = templates.TemplateResponse
+
+def _template_response_with_user(name, context, *args, **kwargs):
+    req = context.get("request")
+    if req and hasattr(req.state, "user"):
+        context.setdefault("current_user", req.state.user)
+    else:
+        context.setdefault("current_user", None)
+    return _orig_template_response(name, context, *args, **kwargs)
+
+templates.TemplateResponse = _template_response_with_user
+
+# ── Middleware de autenticação ────────────────────────────────────────────────
+# Paths completamente públicos (sem autenticação)
+_PUBLIC_PREFIXES = (
+    "/login", "/logout", "/setup",
+    "/static/",
+    "/api/slack/events",   # webhook externo do Slack
+    "/api/pipeline/cron",  # job agendado externo
+)
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    path = request.url.path
+
+    # Permite paths públicos
+    if any(path.startswith(p) for p in _PUBLIC_PREFIXES):
+        return await call_next(request)
+
+    # Verifica se setup inicial é necessário
+    try:
+        if _auth.needs_setup():
+            if path.startswith("/api/"):
+                return JSONResponse({"error": "Setup pendente"}, status_code=503)
+            return RedirectResponse("/setup", status_code=302)
+    except Exception:
+        pass  # DB offline — deixa passar para exibir erro natural
+
+    # Verifica sessão
+    token = request.cookies.get("ixc_session")
+    user = _auth.get_user_from_token(token)
+
+    if user is None:
+        if path.startswith("/api/"):
+            return JSONResponse({"error": "Não autenticado"}, status_code=401)
+        # Só usa `next` se for uma página normal (não admin)
+        next_url = path if not path.startswith("/admin") else "/"
+        return RedirectResponse(f"/login?next={next_url}", status_code=302)
+
+    # Admin-only: /admin/*
+    if path.startswith("/admin/") and user.get("role") != "admin":
+        # GET (browser) → redireciona ao dashboard silenciosamente
+        # POST/PATCH/DELETE (AJAX) → retorna 403 JSON
+        if request.method == "GET":
+            return RedirectResponse("/", status_code=302)
+        return JSONResponse({"error": "Acesso restrito a administradores"}, status_code=403)
+
+    request.state.user = user
+    return await call_next(request)
 
 
 @app.exception_handler(Exception)
@@ -62,7 +125,9 @@ _ENV_KEYS = [
     "LINKEDIN_ACCESS_TOKEN","LINKEDIN_AD_ACCOUNT_ID","LINKEDIN_PARTNER_ID",
     "TIKTOK_CLIENT_ID","TIKTOK_CLIENT_SECRET",
     "TIKTOK_ACCESS_TOKEN","TIKTOK_AD_ACCOUNT_ID","TIKTOK_PIXEL_ID",
-    "HUBSPOT_API_KEY","ANTHROPIC_API_KEY","SLACK_WEBHOOK_URL","DATABASE_URL","APP_BASE_URL",
+    "HUBSPOT_CLIENT_ID","HUBSPOT_CLIENT_SECRET","HUBSPOT_ACCESS_TOKEN","HUBSPOT_REFRESH_TOKEN",
+    "HUBSPOT_PORTAL_ID","HUBSPOT_API_KEY",
+    "ANTHROPIC_API_KEY","SLACK_WEBHOOK_URL","DATABASE_URL","APP_BASE_URL",
     "GA4_MEASUREMENT_ID","GA4_PROPERTY_ID","GA4_API_SECRET","GA4_CREDENTIALS_JSON",
     "GTM_ACCOUNT_ID","GTM_CONTAINER_ID","GTM_PUBLIC_ID","GTM_CREDENTIALS_JSON",
     "SLACK_BOT_TOKEN","SLACK_SIGNING_SECRET",
@@ -297,6 +362,130 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
                      "mqls":0,"sqls":0,"sals":0,"deals_closed":0},
             "by_channel": [], "top_campaigns": [], "alerts": [],
         }
+
+
+def _build_gtm_container(ga4_id: str, meta_pixel: str, li_partner: str, tiktok_pixel: str) -> dict:
+    """Generates a minimal but complete GTM container JSON for import."""
+    tags, triggers, variables = [], [], []
+    uid = 1
+
+    # ── Built-in triggers ────────────────────────────────────────────────
+    triggers.append({"accountId":"0","containerId":"0","triggerId":"2147479553",
+                     "name":"All Pages","type":"PAGEVIEW","fingerprint":"1"})
+    triggers.append({"accountId":"0","containerId":"0","triggerId":"2147479554",
+                     "name":"DOM Ready","type":"DOM_READY","fingerprint":"2"})
+
+    # ── Variables: UTM dataLayer ──────────────────────────────────────────
+    for utm_var in ["utm_source","utm_medium","utm_campaign","utm_content","utm_term"]:
+        variables.append({
+            "accountId":"0","containerId":"0",
+            "variableId": str(uid),
+            "name": f"DLV - {utm_var}",
+            "type": "v",
+            "parameter": [
+                {"type":"INTEGER","key":"dataLayerVersion","value":"2"},
+                {"type":"BOOLEAN","key":"setDefaultValue","value":"false"},
+                {"type":"TEMPLATE","key":"name","value": utm_var},
+            ],
+        })
+        uid += 1
+
+    # ── GA4 Configuration tag ─────────────────────────────────────────────
+    if ga4_id:
+        tags.append({
+            "accountId":"0","containerId":"0","tagId": str(uid),
+            "name": "GA4 - Configuration",
+            "type": "googtag",
+            "parameter": [{"type":"TEMPLATE","key":"id","value": ga4_id}],
+            "firingTriggerId": ["2147479553"],
+        })
+        uid += 1
+        tags.append({
+            "accountId":"0","containerId":"0","tagId": str(uid),
+            "name": "GA4 - generate_lead",
+            "type": "gaawe",
+            "parameter": [
+                {"type":"TEMPLATE","key":"measurementId","value": ga4_id},
+                {"type":"TEMPLATE","key":"eventName","value":"generate_lead"},
+                {"type":"LIST","key":"eventParameters","list":[
+                    {"type":"MAP","map":[
+                        {"type":"TEMPLATE","key":"name","value":"utm_source"},
+                        {"type":"TEMPLATE","key":"value","value":"{{DLV - utm_source}}"},
+                    ]},
+                    {"type":"MAP","map":[
+                        {"type":"TEMPLATE","key":"name","value":"utm_campaign"},
+                        {"type":"TEMPLATE","key":"value","value":"{{DLV - utm_campaign}}"},
+                    ]},
+                ]},
+            ],
+            "firingTriggerId": ["{{lead_trigger}}"],
+        })
+        uid += 1
+
+    # ── Meta Pixel ────────────────────────────────────────────────────────
+    if meta_pixel:
+        tags.append({
+            "accountId":"0","containerId":"0","tagId": str(uid),
+            "name": "Meta Pixel - PageView",
+            "type": "html",
+            "parameter": [{"type":"TEMPLATE","key":"html","value":
+                f"""<script>
+!function(f,b,e,v,n,t,s){{if(f.fbq)return;n=f.fbq=function(){{n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)}};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+fbq('init','{meta_pixel}');fbq('track','PageView');
+</script>"""}],
+            "firingTriggerId": ["2147479553"],
+        })
+        uid += 1
+        tags.append({
+            "accountId":"0","containerId":"0","tagId": str(uid),
+            "name": "Meta Pixel - Lead",
+            "type": "html",
+            "parameter": [{"type":"TEMPLATE","key":"html","value":
+                "<script>fbq('track','Lead',{utm_campaign:'{{DLV - utm_campaign}}',utm_source:'{{DLV - utm_source}}'});</script>"}],
+            "firingTriggerId": ["{{lead_trigger}}"],
+        })
+        uid += 1
+
+    # ── LinkedIn Insight Tag ──────────────────────────────────────────────
+    if li_partner:
+        tags.append({
+            "accountId":"0","containerId":"0","tagId": str(uid),
+            "name": "LinkedIn - Insight Tag",
+            "type": "html",
+            "parameter": [{"type":"TEMPLATE","key":"html","value":
+                f'<script>_linkedin_partner_id="{li_partner}";window._linkedin_data_partner_ids=window._linkedin_data_partner_ids||[];window._linkedin_data_partner_ids.push(_linkedin_partner_id);</script><script async src="https://snap.licdn.com/li.lms-analytics/insight.min.js"></script>'}],
+            "firingTriggerId": ["2147479553"],
+        })
+        uid += 1
+
+    # ── TikTok Pixel ─────────────────────────────────────────────────────
+    if tiktok_pixel:
+        tags.append({
+            "accountId":"0","containerId":"0","tagId": str(uid),
+            "name": "TikTok Pixel - PageView",
+            "type": "html",
+            "parameter": [{"type":"TEMPLATE","key":"html","value":
+                f"""<script>!function(w,d,t){{w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify"];ttq.setAndDefer=function(t,e){{t[e]=function(){{t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}}};for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.load=function(e){{var i="https://analytics.tiktok.com/i18n/pixel/events.js";ttq._i=ttq._i||{{}},ttq._i[e]=[],ttq._t=ttq._t||{{}},ttq._t[e]=+new Date;var o=document.createElement("script");o.type="text/javascript",o.async=!0,o.src=i+"?sdkid="+e+"&lib="+t;var a=document.getElementsByTagName("script")[0];a.parentNode.insertBefore(o,a)}};ttq.load('{tiktok_pixel}');ttq.page()}}(window,document,'ttq');</script>"""}],
+            "firingTriggerId": ["2147479553"],
+        })
+        uid += 1
+
+    return {
+        "exportFormatVersion": 2,
+        "exportTime": "2025-01-01 00:00:00",
+        "containerVersion": {
+            "path": "accounts/0/containers/0/versions/0",
+            "accountId": "0",
+            "containerId": "0",
+            "containerVersionId": "0",
+            "container": {"path":"accounts/0/containers/0","accountId":"0","containerId":"0",
+                         "name":"IXCTraffic Export","publicId":"GTM-XXXXXX",
+                         "usageContext":["WEB"]},
+            "tag": tags,
+            "trigger": triggers,
+            "variable": variables,
+        }
+    }
 
 
 def _get_alert_count():
@@ -571,6 +760,38 @@ async def utm_page(request: Request):
         "request": request, "page": "utm",
         "taxonomy": _load_taxonomy(), "active_product": _active_product, "alert_count": _get_alert_count(),
     })
+
+
+@app.get("/rastreamento", response_class=HTMLResponse)
+async def rastreamento_page(request: Request):
+    _apply_env_overrides()
+    return templates.TemplateResponse("rastreamento.html", {
+        "request": request, "page": "rastreamento",
+        "env": _get_env(),
+        "accounts": _load_accounts(),
+        "active_product": _active_product,
+        "alert_count": _get_alert_count(),
+    })
+
+
+@app.get("/api/rastreamento/gtm-export")
+async def gtm_export(product: str = ""):
+    _apply_env_overrides()
+    accounts = _load_accounts()
+    produto = next((p for p in accounts if p["nome"] == product), None)
+    env = _get_env()
+
+    r = produto.get("rastreamento", {}) if produto else {}
+    contas = produto.get("contas", {}) if produto else {}
+
+    gtm_id       = r.get("gtm_public_id") or env.get("GTM_PUBLIC_ID", "")
+    ga4_id       = r.get("ga4_measurement_id") or env.get("GA4_MEASUREMENT_ID", "")
+    meta_pixel   = contas.get("meta", {}).get("pixel_id") or env.get("META_PIXEL_ID", "")
+    li_partner   = contas.get("linkedin", {}).get("partner_id") or env.get("LINKEDIN_PARTNER_ID", "")
+    tiktok_pixel = contas.get("tiktok", {}).get("pixel_id") or env.get("TIKTOK_PIXEL_ID", "")
+
+    container = _build_gtm_container(ga4_id, meta_pixel, li_partner, tiktok_pixel)
+    return JSONResponse(container)
 
 
 # ── API: Env ──────────────────────────────────────────────────────────────────
@@ -1675,6 +1896,29 @@ async def slack_test(channel: str = None):
     return {"ok": ok, "channel": channel, "token_prefix": token[:12] + "..."}
 
 
+@app.get("/api/smtp/test")
+async def smtp_test(request: Request):
+    """Testa a conexão SMTP e envia um e-mail de diagnóstico para o admin."""
+    _apply_env_overrides()
+    import os as _os
+    cfg = {
+        "SMTP_HOST":     _os.getenv("SMTP_HOST", ""),
+        "SMTP_PORT":     _os.getenv("SMTP_PORT", "587"),
+        "SMTP_USER":     _os.getenv("SMTP_USER", ""),
+        "SMTP_PASSWORD": "***" if _os.getenv("SMTP_PASSWORD") else "(vazio)",
+        "APP_URL":       _os.getenv("APP_URL", ""),
+    }
+    if not _mailer.is_configured():
+        return JSONResponse({"ok": False, "erro": "SMTP não configurado", "vars": cfg})
+    admin_email = request.state.user.get("email", "")
+    ok, err = _mailer.send_welcome(admin_email, "Teste SMTP", "senha-de-teste-123")
+    return JSONResponse({
+        "ok": ok,
+        "erro": err or None,
+        "destino": admin_email,
+        "vars": cfg,
+    })
+
 @app.get("/api/db/test")
 async def db_test():
     """Diagnoses the database connection and shows what URL is being used."""
@@ -1765,6 +2009,11 @@ async def db_setup():
             """)
         conn.commit()
         conn.close()
+        # Cria tabelas de autenticação (idempotente)
+        try:
+            _auth.setup_tables()
+        except Exception as ae:
+            logger.warning("auth.setup_tables falhou: %s", ae)
         return {"message": "Banco configurado: tabelas e migrações aplicadas com sucesso"}
     except Exception as e:
         logger.error("db/setup error: %s", e)
@@ -1779,7 +2028,8 @@ async def health_check():
         "GOOGLE_ADS_DEVELOPER_TOKEN": "Google Ads",
         "LINKEDIN_ACCESS_TOKEN": "LinkedIn Ads",
         "TIKTOK_ACCESS_TOKEN": "TikTok Ads",
-        "HUBSPOT_API_KEY": "HubSpot",
+        "HUBSPOT_ACCESS_TOKEN": "HubSpot (OAuth)",
+        "HUBSPOT_API_KEY": "HubSpot (Private App)",
         "ANTHROPIC_API_KEY": "Claude API",
         "SLACK_WEBHOOK_URL": "Slack",
         "DATABASE_URL": "PostgreSQL",
@@ -1798,6 +2048,7 @@ _CHANNEL_NAMES = {
     "google": "Google Ads",
     "linkedin": "LinkedIn Ads",
     "tiktok": "TikTok Ads",
+    "hubspot": "HubSpot CRM",
 }
 
 _CHANNEL_CLIENT_ID_VARS = {
@@ -1805,6 +2056,7 @@ _CHANNEL_CLIENT_ID_VARS = {
     "google": "GOOGLE_ADS_CLIENT_ID",
     "linkedin": "LINKEDIN_CLIENT_ID",
     "tiktok": "TIKTOK_CLIENT_ID",
+    "hubspot": "HUBSPOT_CLIENT_ID",
 }
 
 
@@ -1818,7 +2070,7 @@ def _base_url(request: Request) -> str:
 @app.get("/auth/connect/{channel}")
 async def auth_connect(channel: str, request: Request):
     _apply_env_overrides()
-    from oauth_flows import meta_auth_url, google_auth_url, linkedin_auth_url, tiktok_auth_url
+    from oauth_flows import meta_auth_url, google_auth_url, linkedin_auth_url, tiktok_auth_url, hubspot_auth_url
 
     client_id_var = _CHANNEL_CLIENT_ID_VARS.get(channel)
     if not client_id_var or not os.getenv(client_id_var):
@@ -1836,6 +2088,7 @@ async def auth_connect(channel: str, request: Request):
         "google": google_auth_url,
         "linkedin": linkedin_auth_url,
         "tiktok": tiktok_auth_url,
+        "hubspot": hubspot_auth_url,
     }
     url, _ = builders[channel](base)
     return RedirectResponse(url)
@@ -1850,6 +2103,7 @@ async def auth_callback(channel: str, request: Request):
         google_exchange, google_list_accounts,
         linkedin_exchange, linkedin_list_accounts,
         tiktok_exchange, tiktok_list_accounts,
+        hubspot_exchange, hubspot_get_portal_info,
     )
 
     params = dict(request.query_params)
@@ -1919,6 +2173,21 @@ async def auth_callback(channel: str, request: Request):
             _save_env_token("TIKTOK_ACCESS_TOKEN", access_token)
             accounts = await tiktok_list_accounts(access_token)
 
+        elif channel == "hubspot":
+            token_data = await hubspot_exchange(code, base)
+            access_token = token_data.get("access_token", "")
+            refresh_token = token_data.get("refresh_token", "")
+            if access_token:
+                _save_env_token("HUBSPOT_ACCESS_TOKEN", access_token)
+            if refresh_token:
+                _save_env_token("HUBSPOT_REFRESH_TOKEN", refresh_token)
+            portal_info = await hubspot_get_portal_info(access_token) if access_token else {}
+            hub_id = str(portal_info.get("hub_id", ""))
+            hub_domain = portal_info.get("hub_domain", hub_id)
+            if hub_id:
+                _save_env_token("HUBSPOT_PORTAL_ID", hub_id)
+            accounts = [{"id": hub_id, "name": hub_domain or hub_id}] if hub_id else []
+
         else:
             raise ValueError(f"Canal desconhecido: {channel}")
 
@@ -1949,6 +2218,7 @@ async def auth_select(request: Request):
         "google": "GOOGLE_ADS_CUSTOMER_ID",
         "linkedin": "LINKEDIN_AD_ACCOUNT_ID",
         "tiktok": "TIKTOK_AD_ACCOUNT_ID",
+        "hubspot": "HUBSPOT_PORTAL_ID",
     }
     env_key = id_vars.get(channel)
     if env_key and account_id:
@@ -2058,3 +2328,204 @@ def _save_env_token(key: str, value: str):
             load_dotenv(ENV_PATH, override=True)
         except Exception:
             pass
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# AUTENTICAÇÃO — Login / Logout / Setup
+# ════════════════════════════════════════════════════════════════════════════
+
+from fastapi import Form as _Form
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    next_url = request.query_params.get("next", "/")
+    return templates.TemplateResponse("login.html", {
+        "request": request, "next": next_url, "error": None, "email": None,
+    })
+
+@app.post("/login", response_class=HTMLResponse)
+async def login_post(
+    request: Request,
+    email:    str = _Form(...),
+    password: str = _Form(...),
+    next:     str = _Form("/"),
+):
+    token = _auth.login(email, password)
+    if not token:
+        return templates.TemplateResponse("login.html", {
+            "request": request, "next": next,
+            "error": "E-mail ou senha incorretos. Tente novamente.",
+            "email": email,
+        }, status_code=401)
+    response = RedirectResponse(next if next.startswith("/") else "/", status_code=302)
+    response.set_cookie(
+        "ixc_session", token,
+        max_age=60 * 60 * 24 * 30,  # 30 dias
+        httponly=True,
+        samesite="lax",
+        secure=False,  # True em produção HTTPS
+    )
+    return response
+
+@app.get("/logout")
+async def logout(request: Request):
+    token = request.cookies.get("ixc_session")
+    if token:
+        _auth.logout(token)
+    response = RedirectResponse("/login", status_code=302)
+    response.delete_cookie("ixc_session")
+    return response
+
+@app.get("/setup", response_class=HTMLResponse)
+async def setup_page(request: Request):
+    if not _auth.needs_setup():
+        return RedirectResponse("/", status_code=302)
+    return templates.TemplateResponse("setup.html", {
+        "request": request, "error": None, "name": None, "email": None,
+    })
+
+@app.post("/setup", response_class=HTMLResponse)
+async def setup_post(
+    request:  Request,
+    name:     str = _Form(...),
+    email:    str = _Form(...),
+    password: str = _Form(...),
+    confirm:  str = _Form(...),
+):
+    if not _auth.needs_setup():
+        return RedirectResponse("/", status_code=302)
+    err = None
+    if len(password) < 8:
+        err = "A senha deve ter no mínimo 8 caracteres."
+    elif password != confirm:
+        err = "As senhas não coincidem."
+    if err:
+        return templates.TemplateResponse("setup.html", {
+            "request": request, "error": err, "name": name, "email": email,
+        }, status_code=400)
+    ok = _auth.create_admin(email, name, password)
+    if not ok:
+        return templates.TemplateResponse("setup.html", {
+            "request": request,
+            "error": "Não foi possível criar a conta. Verifique a conexão com o banco.",
+            "name": name, "email": email,
+        }, status_code=500)
+    token = _auth.login(email, password)
+    response = RedirectResponse("/", status_code=302)
+    response.set_cookie("ixc_session", token, max_age=60*60*24*30,
+                        httponly=True, samesite="lax", secure=False)
+    return response
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# ADMIN — Gestão de Usuários
+# ════════════════════════════════════════════════════════════════════════════
+
+@app.get("/admin/usuarios", response_class=HTMLResponse)
+async def admin_usuarios(request: Request):
+    users = _auth.list_users()
+    return templates.TemplateResponse("admin_usuarios.html", {
+        "request": request, "page": "admin_usuarios",
+        "active_product": _active_product, "alert_count": _get_alert_count(),
+        "users": users,
+    })
+
+@app.post("/admin/usuarios/add")
+async def admin_add_user(request: Request):
+    data = await request.json()
+    email    = data.get("email", "").strip()
+    name     = data.get("name", "").strip()
+    password = data.get("password", "")
+    role     = data.get("role", "user")
+    if not email or not name or not password:
+        return JSONResponse({"ok": False, "error": "Preencha todos os campos."})
+    if len(password) < 8:
+        return JSONResponse({"ok": False, "error": "Senha mínima de 8 caracteres."})
+    if role not in ("admin", "user"):
+        role = "user"
+    ok = _auth.add_user(email, name, password, role)
+    if not ok:
+        return JSONResponse({"ok": False, "error": "E-mail já cadastrado ou erro no banco."})
+
+    # Envia e-mail de boas-vindas com as credenciais
+    email_sent, email_err = _mailer.send_welcome(email, name, password)
+    return JSONResponse({
+        "ok": True,
+        "email_sent": email_sent,
+        "email_warn": None if email_sent else (
+            "Usuário criado, mas o e-mail não foi enviado. "
+            "Verifique as configurações SMTP em Conexões."
+            if _mailer.is_configured() else
+            "Usuário criado. Configure o SMTP em Conexões para enviar e-mails automáticos."
+        ),
+    })
+
+@app.post("/admin/usuarios/toggle")
+async def admin_toggle_user(request: Request):
+    data = await request.json()
+    uid  = int(data.get("user_id", 0))
+    current = request.state.user
+    if uid == current["id"]:
+        return JSONResponse({"ok": False, "error": "Você não pode desativar a própria conta."})
+    ok = _auth.toggle_active(uid)
+    return JSONResponse({"ok": ok})
+
+@app.post("/admin/usuarios/remove")
+async def admin_remove_user(request: Request):
+    data = await request.json()
+    uid  = int(data.get("user_id", 0))
+    current = request.state.user
+    if uid == current["id"]:
+        return JSONResponse({"ok": False, "error": "Você não pode remover a própria conta."})
+    ok = _auth.remove_user(uid)
+    return JSONResponse({"ok": ok})
+
+@app.post("/admin/usuarios/reset-password")
+async def admin_reset_password(request: Request):
+    data = await request.json()
+    uid  = int(data.get("user_id", 0))
+    pw   = data.get("password", "")
+    if len(pw) < 8:
+        return JSONResponse({"ok": False, "error": "Senha mínima de 8 caracteres."})
+    ok = _auth.change_password(uid, pw)
+    return JSONResponse({"ok": ok})
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# MINHA CONTA — Alterar própria senha
+# ════════════════════════════════════════════════════════════════════════════
+
+@app.get("/minha-conta/senha", response_class=HTMLResponse)
+async def minha_conta_senha(request: Request):
+    return templates.TemplateResponse("trocar_senha.html", {
+        "request": request, "page": "minha_conta",
+        "active_product": _active_product, "alert_count": _get_alert_count(),
+        "success": False, "error": None,
+    })
+
+@app.post("/minha-conta/senha", response_class=HTMLResponse)
+async def minha_conta_senha_post(
+    request:          Request,
+    current_password: str = _Form(...),
+    new_password:     str = _Form(...),
+    confirm_password: str = _Form(...),
+):
+    user = request.state.user
+    error = None
+
+    if len(new_password) < 8:
+        error = "A nova senha deve ter no mínimo 8 caracteres."
+    elif new_password != confirm_password:
+        error = "A nova senha e a confirmação não coincidem."
+
+    if not error:
+        ok, msg = _auth.change_own_password(user["id"], current_password, new_password)
+        if not ok:
+            error = msg
+
+    return templates.TemplateResponse("trocar_senha.html", {
+        "request": request, "page": "minha_conta",
+        "active_product": _active_product, "alert_count": _get_alert_count(),
+        "success": error is None,
+        "error": error,
+    })

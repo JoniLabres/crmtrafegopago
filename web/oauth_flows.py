@@ -1,4 +1,4 @@
-"""OAuth 2.0 flows for Meta Ads, Google Ads, LinkedIn Ads and TikTok Ads."""
+"""OAuth 2.0 flows for Meta Ads, Google Ads, LinkedIn Ads, TikTok Ads and HubSpot CRM."""
 import os
 import secrets
 import time
@@ -305,3 +305,56 @@ async def tiktok_list_accounts(access_token: str) -> list[dict]:
             return []
         data = r.json().get("data", {})
         return [{"id": str(a.get("advertiser_id", "")), "name": a.get("advertiser_name", "")} for a in data.get("list", [])]
+
+
+# ── HubSpot CRM ───────────────────────────────────────────────────────────────
+
+_HUBSPOT_SCOPES = " ".join([
+    "oauth",
+    "crm.objects.contacts.read",
+    "crm.objects.contacts.write",
+    "crm.objects.deals.read",
+    "crm.objects.deals.write",
+    "crm.schemas.contacts.read",
+])
+
+
+def hubspot_auth_url(base_url: str) -> tuple[str, str]:
+    state = generate_state("hubspot")
+    params = {
+        "client_id": os.getenv("HUBSPOT_CLIENT_ID", ""),
+        "redirect_uri": _redirect_uri(base_url, "hubspot"),
+        "scope": _HUBSPOT_SCOPES,
+        "state": state,
+    }
+    return "https://app.hubspot.com/oauth/authorize?" + urlencode(params), state
+
+
+async def hubspot_exchange(code: str, base_url: str) -> dict:
+    async with httpx.AsyncClient() as client:
+        r = await client.post(
+            "https://api.hubapi.com/oauth/v1/token",
+            data={
+                "grant_type": "authorization_code",
+                "client_id": os.getenv("HUBSPOT_CLIENT_ID"),
+                "client_secret": os.getenv("HUBSPOT_CLIENT_SECRET"),
+                "redirect_uri": _redirect_uri(base_url, "hubspot"),
+                "code": code,
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=15,
+        )
+        r.raise_for_status()
+        return r.json()
+
+
+async def hubspot_get_portal_info(access_token: str) -> dict:
+    """Return portal metadata: hub_id (portal ID), hub_domain, app_id, scopes."""
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"https://api.hubapi.com/oauth/v1/access-tokens/{access_token}",
+            timeout=15,
+        )
+        if r.status_code != 200:
+            return {}
+        return r.json()

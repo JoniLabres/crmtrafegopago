@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — IXCTraffic</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #111111;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      padding: 2.5rem 2rem;
+      width: 100%;
+      max-width: 400px;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 2rem;
+      justify-content: center;
+    }
+    .logo-mark {
+      width: 40px; height: 40px;
+      background: #a3ff00;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.65rem; font-weight: 900; color: #0a0a0a;
+      letter-spacing: -0.5px;
+    }
+    .logo-text h1 { font-size: 1.1rem; font-weight: 800; }
+    .logo-text p  { font-size: 0.75rem; color: #888; margin-top: 1px; }
+
+    h2 { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .subtitle { font-size: 0.85rem; color: #888; margin-bottom: 1.75rem; }
+
+    .form-group { margin-bottom: 1rem; }
+    label { display: block; font-size: 0.8rem; color: #aaa; margin-bottom: 0.4rem; font-weight: 500; }
+    input {
+      width: 100%;
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 0.65rem 0.85rem;
+      font-size: 0.9rem;
+      color: #fff;
+      font-family: inherit;
+      transition: border-color .15s;
+      outline: none;
+    }
+    input:focus { border-color: #a3ff00; }
+    input::placeholder { color: #555; }
+
+    .btn {
+      width: 100%;
+      background: #a3ff00;
+      color: #0a0a0a;
+      border: none;
+      border-radius: 8px;
+      padding: 0.7rem;
+      font-size: 0.9rem;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      margin-top: 0.5rem;
+      transition: background .15s;
+    }
+    .btn:hover { background: #b8ff33; }
+
+    .error {
+      background: rgba(255,68,68,.12);
+      border: 1px solid rgba(255,68,68,.3);
+      border-radius: 8px;
+      color: #ff6b6b;
+      font-size: 0.82rem;
+      padding: 0.65rem 0.85rem;
+      margin-bottom: 1rem;
+    }
+    .divider {
+      border: none;
+      border-top: 1px solid #2a2a2a;
+      margin: 1.75rem 0 1.25rem;
+    }
+    .footer-note {
+      text-align: center;
+      font-size: 0.75rem;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">
+      <div class="logo-mark">IXC</div>
+      <div class="logo-text">
+        <h1>IXCTraffic</h1>
+        <p>Plataforma de Tráfego Pago</p>
+      </div>
+    </div>
+
+    <h2>Entrar</h2>
+    <p class="subtitle">Acesso restrito a usuários autorizados</p>
+
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+
+    <form method="POST" action="/login">
+      <input type="hidden" name="next" value="{{ next or '/' }}">
+      <div class="form-group">
+        <label for="email">E-mail corporativo</label>
+        <input type="email" id="email" name="email" placeholder="voce@empresa.com"
+               value="{{ email or '' }}" required autofocus>
+      </div>
+      <div class="form-group">
+        <label for="password">Senha</label>
+        <input type="password" id="password" name="password" placeholder="••••••••" required>
+      </div>
+      <button type="submit" class="btn">Entrar</button>
+    </form>
+
+    <hr class="divider">
+    <p class="footer-note">Não tem acesso? Solicite ao administrador da plataforma.</p>
+  </div>
+</body>
+</html>

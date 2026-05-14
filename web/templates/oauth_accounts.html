@@ -1,11 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Selecionar Conta — {{ channel_name }}{% endblock %}
-{% block topbar_title %}OAuth — Selecionar conta de anúncios{% endblock %}
+{% block topbar_title %}OAuth — {{ 'Confirmar portal' if channel == 'hubspot' else 'Selecionar conta de anúncios' }}{% endblock %}
 
 {% block content %}
 <div class="page-header">
   <h1 class="page-title">Conectado com {{ channel_name }}</h1>
-  <p class="page-desc">Selecione qual conta de anúncios deseja usar com o IXCTraffic.</p>
+  <p class="page-desc">
+    {% if channel == 'hubspot' %}
+      Confirme o portal do HubSpot que será sincronizado com o IXCTraffic.
+    {% else %}
+      Selecione qual conta de anúncios deseja usar com o IXCTraffic.
+    {% endif %}
+  </p>
 </div>
 
 {% if error %}
@@ -18,20 +24,30 @@
 {% elif accounts %}
 <div class="panel">
   <div class="panel-head">
-    <h3>{{ accounts|length }} conta(s) encontrada(s)</h3>
+    <h3>
+      {% if channel == 'hubspot' %}
+        Portal autorizado
+      {% else %}
+        {{ accounts|length }} conta(s) encontrada(s)
+      {% endif %}
+    </h3>
   </div>
   <div class="panel-body" style="padding:0;">
     {% for account in accounts %}
     <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.5rem;border-bottom:1px solid var(--border);">
       <div>
         <div style="font-weight:600;font-size:0.95rem;">{{ account.name or account.id }}</div>
-        <div style="color:var(--muted);font-size:0.8rem;font-family:monospace;">ID: {{ account.id }}</div>
+        <div style="color:var(--muted);font-size:0.8rem;font-family:monospace;">
+          {% if channel == 'hubspot' %}Portal ID:{% else %}ID:{% endif %} {{ account.id }}
+        </div>
       </div>
       <form method="POST" action="/auth/select">
         <input type="hidden" name="channel" value="{{ channel }}">
         <input type="hidden" name="account_id" value="{{ account.id }}">
         <input type="hidden" name="account_name" value="{{ account.name or account.id }}">
-        <button type="submit" class="btn btn-primary btn-sm">Usar esta conta</button>
+        <button type="submit" class="btn btn-primary btn-sm">
+          {{ 'Confirmar portal' if channel == 'hubspot' else 'Usar esta conta' }}
+        </button>
       </form>
     </div>
     {% endfor %}
@@ -46,7 +62,8 @@
     <div style="font-size:2rem;margin-bottom:1rem;">⚠️</div>
     <p style="margin:0 0 0.5rem;font-weight:600;">Nenhuma conta encontrada</p>
     <p style="font-size:0.85rem;margin:0 0 1.5rem;">
-      O token foi salvo com sucesso, mas não há contas de anúncios acessíveis.
+      O token foi salvo com sucesso, mas não há
+      {% if channel == 'hubspot' %}portal acessível{% else %}contas de anúncios acessíveis{% endif %}.
       Verifique as permissões do usuário na plataforma.
     </p>
     <a href="/conexoes" class="btn btn-primary">Voltar para Conexões</a>
