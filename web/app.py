@@ -2477,7 +2477,7 @@ async def rastreamento_deploy(request: Request):
             main_url=main_url, thankyou_url=thankyou_url,
         )
         if publish:
-            pub = publish_workspace(workspace_id=workspace_id, note="Deploy via IXCTraffic")
+            pub = publish_workspace(workspace_id=result.get("workspace_id", workspace_id), note="Deploy via IXCTraffic")
             result["published"] = True
             result["version_id"] = pub.get("version_id")
             result["log"].append(f"✓ Container GTM publicado — versão {pub.get('version_id')}")

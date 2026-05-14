@@ -120,6 +120,28 @@ def _container_path() -> str:
     )
 
 
+def _resolve_workspace() -> str:
+    """Returns a usable workspace ID — creates a new one if default is submitted/locked."""
+    service   = _get_service()
+    container = _container_path()
+    try:
+        ws_list = service.accounts().containers().workspaces().list(
+            parent=container).execute()
+        for ws in ws_list.get("workspace", []):
+            status = ws.get("workspaceStatus", "")
+            if status not in ("submitted",):
+                return ws["workspaceId"]
+    except Exception:
+        pass
+    # All workspaces are submitted or list failed — create a fresh one
+    new_ws = service.accounts().containers().workspaces().create(
+        parent=container,
+        body={"name": "IXCTraffic Deploy", "description": "Criado automaticamente pelo IXCTraffic"},
+    ).execute()
+    logger.info("Novo workspace GTM criado: %s", new_ws.get("workspaceId"))
+    return new_ws["workspaceId"]
+
+
 def list_workspace(workspace_id: str = "1") -> dict:
     """Returns all tags, triggers, and variables in a workspace."""
     service = _get_service()
@@ -422,9 +444,11 @@ def deploy_all_tags(
     Returns a log of every action taken."""
     service = _get_service()
     container = _container_path()
+    workspace_id = _resolve_workspace()
     ws = f"{container}/workspaces/{workspace_id}"
 
     log: list[str] = []
+    log.append(f"  ℹ Usando workspace {workspace_id}")
 
     # ── Load existing items (deduplication) ──────────────────────────────────
     existing = list_workspace(workspace_id)
@@ -648,7 +672,7 @@ def deploy_all_tags(
         f"{len([l for l in log if l.startswith('↺')])} atualizados"
     )
     log.append(summary)
-    return {"log": log, "ok": True}
+    return {"log": log, "ok": True, "workspace_id": workspace_id}
 
 
 def generate_mega_snippet(
