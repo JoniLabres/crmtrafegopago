@@ -444,7 +444,10 @@ def deploy_all_tags(
     log.append(f"  ℹ Usando workspace {workspace_id}")
 
     # ── Load existing items (deduplication) ──────────────────────────────────
-    existing = list_workspace(workspace_id)
+    try:
+        existing = list_workspace(workspace_id)
+    except Exception:
+        existing = {"tags": [], "triggers": [], "variables": []}
     ex_tags     = {t["name"]: t for t in existing["tags"]}
     ex_triggers = {t["name"]: t for t in existing["triggers"]}
     ex_vars     = {v["name"]: v for v in existing["variables"]}
