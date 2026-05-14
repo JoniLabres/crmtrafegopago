@@ -2357,6 +2357,24 @@ async def ga4_event(request: Request):
 
 # ── API: GTM ──────────────────────────────────────────────────────────────────
 
+@app.get("/api/gtm/debug-creds")
+async def gtm_debug_creds():
+    """Mostra quais credenciais GTM estão carregadas (valores mascarados)."""
+    _apply_env_overrides()
+    def mask(v: str) -> str:
+        if not v:
+            return "(vazio)"
+        return v[:6] + "..." + v[-4:] if len(v) > 10 else "***"
+    return {
+        "GTM_CLIENT_ID":            mask(os.getenv("GTM_CLIENT_ID", "")),
+        "GTM_CLIENT_SECRET":        mask(os.getenv("GTM_CLIENT_SECRET", "")),
+        "GTM_OAUTH_REFRESH_TOKEN":  mask(os.getenv("GTM_OAUTH_REFRESH_TOKEN", "")),
+        "GTM_ACCOUNT_ID":           os.getenv("GTM_ACCOUNT_ID", "(vazio)"),
+        "GTM_PUBLIC_ID":            os.getenv("GTM_PUBLIC_ID", "(vazio)"),
+        "has_db":                   bool(config_store.get_db_url()),
+    }
+
+
 @app.get("/api/gtm/verify")
 async def gtm_verify():
     _apply_env_overrides()
