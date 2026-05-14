@@ -916,6 +916,30 @@ async def env_save(request: Request):
     return {"message": f"{saved} variável(is) salva(s) no .env"}
 
 
+@app.post("/api/env/delete")
+async def env_delete(request: Request):
+    """Remove chaves específicas dos overrides salvos no banco."""
+    data = await request.json()
+    keys_to_delete = data.get("keys", [])
+    if not keys_to_delete:
+        return JSONResponse({"error": "Nenhuma chave informada."}, status_code=400)
+    db_url = get_db_url()
+    if not db_url:
+        for k in keys_to_delete:
+            os.environ.pop(k, None)
+        return {"message": f"{len(keys_to_delete)} chave(s) removida(s) da sessão."}
+    try:
+        existing = _load_env_overrides()
+        removed = [k for k in keys_to_delete if k in existing]
+        for k in keys_to_delete:
+            existing.pop(k, None)
+            os.environ.pop(k, None)
+        config_store.save("env_overrides", existing, None)
+        return {"message": f"{len(removed)} chave(s) removida(s) do banco: {', '.join(removed)}"}
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
 # ── API: UTM ──────────────────────────────────────────────────────────────────
 
 @app.post("/api/utm/build")
