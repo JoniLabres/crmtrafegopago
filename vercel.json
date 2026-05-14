@@ -2,7 +2,6 @@
   "version": 2,
   "functions": {
     "api/index.py": {
-      "maxLambdaSize": "50mb",
       "maxDuration": 60
     }
   },
