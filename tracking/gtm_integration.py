@@ -121,25 +121,18 @@ def _container_path() -> str:
 
 
 def _resolve_workspace() -> str:
-    """Returns a usable workspace ID — creates a new one if default is submitted/locked."""
+    """Creates a fresh workspace for each deploy to avoid 'already submitted' conflicts."""
+    import datetime
     service   = _get_service()
     container = _container_path()
-    try:
-        ws_list = service.accounts().containers().workspaces().list(
-            parent=container).execute()
-        for ws in ws_list.get("workspace", []):
-            status = ws.get("workspaceStatus", "")
-            if status not in ("submitted",):
-                return ws["workspaceId"]
-    except Exception:
-        pass
-    # All workspaces are submitted or list failed — create a fresh one
+    ts = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M")
     new_ws = service.accounts().containers().workspaces().create(
         parent=container,
-        body={"name": "IXCTraffic Deploy", "description": "Criado automaticamente pelo IXCTraffic"},
+        body={"name": f"IXCTraffic-{ts}", "description": "Deploy automático via IXCTraffic"},
     ).execute()
-    logger.info("Novo workspace GTM criado: %s", new_ws.get("workspaceId"))
-    return new_ws["workspaceId"]
+    wid = new_ws["workspaceId"]
+    logger.info("Workspace GTM criado: %s", wid)
+    return wid
 
 
 def list_workspace(workspace_id: str = "1") -> dict:
