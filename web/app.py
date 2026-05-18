@@ -630,10 +630,24 @@ async def dashboard_chart_data(days: int = 30, produto: str = ""):
             except Exception:
                 conn.rollback()
 
+            # Top UTM campaigns by leads
+            cur.execute(f"""
+                SELECT campaign_utm, COALESCE(SUM(leads),0), COALESCE(SUM(spend),0)
+                FROM campaigns_daily
+                WHERE date >= CURRENT_DATE - %s {p_filter}
+                  AND campaign_utm IS NOT NULL AND campaign_utm <> ''
+                GROUP BY campaign_utm
+                ORDER BY SUM(leads) DESC
+                LIMIT 10
+            """, params)
+            top_utms = [{"utm": r[0], "leads": int(r[1]), "spend": float(r[2])}
+                        for r in cur.fetchall()]
+
         conn.close()
         return {
             "daily": daily,
             "channels": channels,
+            "top_utms": top_utms,
             "funnel": [
                 {"label": "Leads",    "value": int(leads_total)},
                 {"label": "MQL",      "value": int(mqls)},
@@ -644,7 +658,7 @@ async def dashboard_chart_data(days: int = 30, produto: str = ""):
         }
     except Exception as exc:
         logger.warning("chart-data error: %s", exc)
-        return {"daily": [], "channels": [], "funnel": []}
+        return {"daily": [], "channels": [], "top_utms": [], "funnel": []}
 
 
 @app.get("/conexoes", response_class=HTMLResponse)
