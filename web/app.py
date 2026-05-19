@@ -217,23 +217,29 @@ def _save_last_sync(total: int, date_from, date_to) -> None:
     }, None)
 
 
-def _get_dashboard_data(days: int = 30, produto: str = ""):
+def _get_dashboard_data(days: int = 30, produto: str = "", date_from: str = "", date_to: str = ""):
     try:
         import psycopg2
         conn = psycopg2.connect(get_db_url())
 
-        # Build optional produto filter fragment
+        # Build date clause and params
+        if date_from and date_to:
+            date_clause = "date BETWEEN %s AND %s"
+            d_params: tuple = (date_from, date_to)
+        else:
+            date_clause = "date >= CURRENT_DATE - %s"
+            d_params = (days,)
+
         p_filter = "AND produto = %s" if produto else ""
+        params_base = d_params + ((produto,) if produto else ())
 
         with conn.cursor() as cur:
-            params_base = (days, produto) if produto else (days,)
-
             cur.execute(f"""
                 SELECT COALESCE(SUM(spend),0), COALESCE(SUM(leads),0),
                        COALESCE(SUM(revenue),0), COALESCE(COUNT(DISTINCT channel),0),
                        COALESCE(AVG(roas),0),
                        COALESCE(SUM(impressions),0), COALESCE(SUM(clicks),0)
-                FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
+                FROM campaigns_daily WHERE {date_clause} {p_filter}
             """, params_base)
             spend, leads, revenue, channels, roas, impressions, clicks = cur.fetchone()
 
@@ -243,7 +249,7 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
                 cur.execute(f"""
                     SELECT COALESCE(SUM(mqls),0), COALESCE(SUM(sqls),0),
                            COALESCE(SUM(sals),0), COALESCE(SUM(deals_closed),0)
-                    FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
+                    FROM campaigns_daily WHERE {date_clause} {p_filter}
                 """, params_base)
                 mqls, sqls, sals, deals_closed = cur.fetchone()
             except Exception:
@@ -267,7 +273,7 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
                        COALESCE(ROUND(
                            CASE WHEN SUM(impressions)>0 THEN SUM(clicks)::numeric/SUM(impressions) ELSE 0 END
                        ::numeric,4), 0) AS ctr
-                FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
+                FROM campaigns_daily WHERE {date_clause} {p_filter}
                 GROUP BY channel ORDER BY spend DESC
             """, params_base)
             cols = [d[0] for d in cur.description]
@@ -279,7 +285,7 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
                     SELECT channel,
                            COALESCE(SUM(mqls),0), COALESCE(SUM(sqls),0),
                            COALESCE(SUM(sals),0), COALESCE(SUM(deals_closed),0)
-                    FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
+                    FROM campaigns_daily WHERE {date_clause} {p_filter}
                     GROUP BY channel
                 """, params_base)
                 funnel_by_ch = {r[0]: {"mqls": int(r[1]), "sqls": int(r[2]),
@@ -312,7 +318,7 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
                        COALESCE(ROUND(
                            CASE WHEN SUM(leads)>0 THEN SUM(spend)/SUM(leads) ELSE 0 END
                        ::numeric,2), 0) AS cpl
-                FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
+                FROM campaigns_daily WHERE {date_clause} {p_filter}
                 GROUP BY campaign_utm, channel, produto
                 ORDER BY spend DESC LIMIT 10
             """, params_base)
@@ -325,7 +331,7 @@ def _get_dashboard_data(days: int = 30, produto: str = ""):
                     SELECT campaign_utm,
                            COALESCE(SUM(mqls),0), COALESCE(SUM(sqls),0),
                            COALESCE(SUM(sals),0), COALESCE(SUM(deals_closed),0)
-                    FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
+                    FROM campaigns_daily WHERE {date_clause} {p_filter}
                     GROUP BY campaign_utm
                 """, params_base)
                 funnel_by_utm = {r[0]: (int(r[1]), int(r[2]), int(r[3]), int(r[4])) for r in cur.fetchall()}
@@ -524,10 +530,9 @@ async def dashboard(request: Request):
         if date_from_str and date_to_str:
             try:
                 from datetime import date as _date
-                df = _date.fromisoformat(date_from_str)
-                dt = _date.fromisoformat(date_to_str)
-                days = (_date.today() - df).days + 1
-                days = max(1, min(days, 730))
+                _date.fromisoformat(date_from_str)  # validate
+                _date.fromisoformat(date_to_str)
+                days = 30  # kept for display only; actual filter uses date_from/date_to
             except ValueError:
                 days = 30
                 date_from_str = date_to_str = ""
@@ -539,7 +544,7 @@ async def dashboard(request: Request):
                 days = 30
             date_from_str = date_to_str = ""
 
-        data = _get_dashboard_data(days, produto)
+        data = _get_dashboard_data(days, produto, date_from=date_from_str, date_to=date_to_str)
         ltv_all = _load_ltv()
 
         if produto and isinstance(ltv_all, dict) and produto in ltv_all.get("por_produto", {}):
@@ -587,21 +592,37 @@ async def dashboard(request: Request):
         )
 
 @app.get("/api/dashboard/chart-data")
-async def dashboard_chart_data(days: int = 30, produto: str = ""):
-    """Returns daily spend/leads trend and channel breakdown for charts."""
+async def dashboard_chart_data(
+    days: int = 30,
+    produto: str = "",
+    date_from: str = "",
+    date_to: str = "",
+):
+    """Returns daily spend/leads trend and channel breakdown for charts.
+    Accepts either date_from+date_to (YYYY-MM-DD) or days (integer offset from today).
+    """
     _apply_env_overrides()
     try:
         import psycopg2
         conn = psycopg2.connect(get_db_url())
+
+        # Build date clause and base params
+        if date_from and date_to:
+            date_clause = "date BETWEEN %s AND %s"
+            d_params: tuple = (date_from, date_to)
+        else:
+            date_clause = "date >= CURRENT_DATE - %s"
+            d_params = (days,)
+
         p_filter = "AND produto = %s" if produto else ""
-        params = (days, produto) if produto else (days,)
+        params = d_params + ((produto,) if produto else ())
 
         with conn.cursor() as cur:
-            # Daily totals (all channels combined)
+            # Daily totals
             cur.execute(f"""
                 SELECT date::text, COALESCE(SUM(spend),0), COALESCE(SUM(leads),0)
                 FROM campaigns_daily
-                WHERE date >= CURRENT_DATE - %s {p_filter}
+                WHERE {date_clause} {p_filter}
                 GROUP BY date ORDER BY date
             """, params)
             daily = [{"date": r[0], "spend": float(r[1]), "leads": int(r[2])}
@@ -611,7 +632,7 @@ async def dashboard_chart_data(days: int = 30, produto: str = ""):
             cur.execute(f"""
                 SELECT channel, COALESCE(SUM(spend),0), COALESCE(SUM(leads),0)
                 FROM campaigns_daily
-                WHERE date >= CURRENT_DATE - %s {p_filter}
+                WHERE {date_clause} {p_filter}
                 GROUP BY channel ORDER BY SUM(spend) DESC
             """, params)
             channels = [{"channel": r[0], "spend": float(r[1]), "leads": int(r[2])}
@@ -624,7 +645,8 @@ async def dashboard_chart_data(days: int = 30, produto: str = ""):
                     SELECT COALESCE(SUM(leads),0), COALESCE(SUM(mqls),0),
                            COALESCE(SUM(sqls),0), COALESCE(SUM(sals),0),
                            COALESCE(SUM(deals_closed),0)
-                    FROM campaigns_daily WHERE date >= CURRENT_DATE - %s {p_filter}
+                    FROM campaigns_daily
+                    WHERE {date_clause} {p_filter}
                 """, params)
                 leads_total, mqls, sqls, sals, deals_closed = cur.fetchone()
             except Exception:
@@ -634,7 +656,7 @@ async def dashboard_chart_data(days: int = 30, produto: str = ""):
             cur.execute(f"""
                 SELECT campaign_utm, COALESCE(SUM(leads),0), COALESCE(SUM(spend),0)
                 FROM campaigns_daily
-                WHERE date >= CURRENT_DATE - %s {p_filter}
+                WHERE {date_clause} {p_filter}
                   AND campaign_utm IS NOT NULL AND campaign_utm <> ''
                 GROUP BY campaign_utm
                 ORDER BY SUM(leads) DESC
@@ -1160,7 +1182,7 @@ async def pipeline_cron(request: Request):
 
 @app.post("/api/pipeline/sync")
 async def pipeline_sync(request: Request):
-    """Quick sync for last 2 days — called from dashboard Sync button."""
+    """Sync from dashboard Sync button. Accepts optional days/date_from/date_to; defaults to 30 days."""
     try:
         from load_database import run_pipeline, _load_accounts
         from datetime import date, timedelta
@@ -1168,11 +1190,25 @@ async def pipeline_sync(request: Request):
         accounts = _load_accounts()
         if not accounts:
             return JSONResponse({"message": "Nenhum produto configurado."}, status_code=400)
-        date_to   = date.today()
-        date_from = date_to - timedelta(days=2)
+
+        # Parse body for optional period override
+        body = {}
+        try:
+            body = await request.json()
+        except Exception:
+            pass
+
+        if body.get("date_from") and body.get("date_to"):
+            date_from = date.fromisoformat(body["date_from"])
+            date_to   = date.fromisoformat(body["date_to"])
+        else:
+            days = int(body.get("days", 30))
+            date_to   = date.today()
+            date_from = date_to - timedelta(days=days)
+
         total = run_pipeline(date_from=date_from, date_to=date_to)
         _save_last_sync(total, date_from, date_to)
-        return {"message": f"{total} registros sincronizados"}
+        return {"message": f"{total} registros sincronizados ({date_from} → {date_to})"}
     except Exception as e:
         logger.error("Sync error: %s", e, exc_info=True)
         return JSONResponse({"message": f"Erro: {e}"}, status_code=500)

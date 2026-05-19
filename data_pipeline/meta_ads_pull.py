@@ -19,8 +19,14 @@ LEAD_ACTION_TYPES = {
     "omni_lead",
     "complete_registration",
     "offsite_conversion.custom.lead",
+    "onsite_conversion.lead_grouped",
     "onsite_conversion.messaging_conversation_started_7d",
+    "onsite_conversion.messaging_first_reply",
     "contact_total",
+    "schedule",
+    "find_location",
+    "start_trial",
+    "submit_application",
 }
 
 

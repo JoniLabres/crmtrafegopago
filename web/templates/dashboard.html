@@ -724,8 +724,21 @@ async function syncData(btn) {
   const orig = btn.textContent;
   btn.textContent = '↻ Sincronizando...';
   btn.disabled = true;
+  // Pass current period so sync covers what the dashboard is showing
+  const qs = new URLSearchParams(window.location.search);
+  const body = {};
+  if (qs.get('date_from') && qs.get('date_to')) {
+    body.date_from = qs.get('date_from');
+    body.date_to   = qs.get('date_to');
+  } else {
+    body.days = parseInt(qs.get('days') || '30');
+  }
   try {
-    const r = await fetch('/api/pipeline/sync', { method: 'POST' });
+    const r = await fetch('/api/pipeline/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
     const d = await r.json();
     showToast(d.message || 'Sincronizado', r.ok ? 'ok' : 'error');
     if (r.ok) setTimeout(() => location.reload(), 1200);
