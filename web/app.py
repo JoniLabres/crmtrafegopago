@@ -52,8 +52,10 @@ templates.TemplateResponse = _template_response_with_user
 _PUBLIC_PREFIXES = (
     "/login", "/logout", "/setup",
     "/static/",
-    "/api/slack/events",   # webhook externo do Slack
-    "/api/pipeline/cron",  # job agendado externo
+    "/api/slack/events",        # webhook externo do Slack
+    "/api/pipeline/cron",       # job agendado externo
+    "/view/",                   # links compartilhados para heads (sem login)
+    "/api/dashboard/chart-data", # dados usados pelo shared_view
 )
 
 def _auth_enabled() -> bool:
