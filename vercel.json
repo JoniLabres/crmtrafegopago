@@ -12,5 +12,11 @@
       "src": "/(.*)",
       "dest": "api/index.py"
     }
+  ],
+  "crons": [
+    { "path": "/api/pipeline/cron", "schedule": "0 11 * * *" },
+    { "path": "/api/pipeline/cron", "schedule": "0 15 * * *" },
+    { "path": "/api/pipeline/cron", "schedule": "0 18 * * *" },
+    { "path": "/api/pipeline/cron", "schedule": "0 21 * * *" }
   ]
 }
