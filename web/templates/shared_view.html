@@ -13,34 +13,43 @@
     }
     body { background: var(--bg); color: var(--text); font-family: 'Inter','Segoe UI',sans-serif; font-size: 14px; min-height: 100vh; }
 
-    /* ── Header ── */
     .header {
       background: var(--surface); border-bottom: 1px solid var(--border);
-      padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between;
+      padding: 0.85rem 1.5rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .75rem;
     }
     .header-brand { display: flex; align-items: center; gap: 0.75rem; }
     .header-logo  { width: 28px; height: 28px; background: var(--primary); border-radius: 6px;
                     display: flex; align-items: center; justify-content: center;
-                    font-weight: 900; font-size: 0.8rem; color: #0a0a0a; }
+                    font-weight: 900; font-size: 0.8rem; color: #0a0a0a; flex-shrink:0; }
     .header-title { font-weight: 700; font-size: 1rem; }
     .header-sub   { font-size: 0.75rem; color: var(--muted); }
-    .header-badge {
-      background: rgba(163,255,0,.12); color: var(--primary);
-      border: 1px solid rgba(163,255,0,.25); border-radius: 20px;
-      padding: 0.25rem 0.75rem; font-size: 0.72rem; font-weight: 700;
+
+    /* ── Seletor de período ── */
+    .period-bar {
+      display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
     }
+    .period-btn {
+      background: rgba(255,255,255,.06); border: 1px solid var(--border); color: var(--muted);
+      border-radius: 8px; padding: .3rem .75rem; font-size: .78rem; font-family: inherit;
+      cursor: pointer; transition: all .15s;
+    }
+    .period-btn:hover  { border-color: rgba(163,255,0,.4); color: var(--text); }
+    .period-btn.active { background: rgba(163,255,0,.12); border-color: rgba(163,255,0,.4); color: var(--primary); font-weight: 700; }
+    .period-sep { color: var(--border); font-size: 1rem; }
+    .date-input {
+      background: rgba(255,255,255,.06); border: 1px solid var(--border); color: var(--text);
+      border-radius: 8px; padding: .28rem .6rem; font-size: .78rem; font-family: inherit; outline: none;
+    }
+    .date-input:focus { border-color: rgba(163,255,0,.4); }
 
     /* ── Layout ── */
     .page { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
 
-    /* ── KPI cards ── */
-    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-    .kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.1rem 1.25rem; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.25rem; }
     .kpi-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 0.35rem; }
-    .kpi-value { font-size: 1.55rem; font-weight: 800; line-height: 1; }
-    .kpi-sub   { font-size: 0.72rem; color: var(--muted); margin-top: 0.3rem; }
+    .kpi-value { font-size: 1.5rem; font-weight: 800; line-height: 1; }
 
-    /* ── Charts ── */
     .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 1.25rem; }
     .panel-head { padding: 0.9rem 1.25rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
     .panel-head h3 { font-size: 0.95rem; font-weight: 700; }
@@ -50,7 +59,12 @@
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
     @media (max-width: 720px) { .grid-2 { grid-template-columns: 1fr; } }
 
-    /* ── Footer ── */
+    /* ── Donut ── */
+    .donut-wrap { display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+    .donut-canvas-wrap { width: 180px; height: 180px; }
+    .donut-legend { width: 100%; display: flex; flex-direction: column; gap: .45rem; font-size: .8rem; }
+    .donut-row { display: flex; align-items: center; gap: .5rem; }
+
     .footer { text-align: center; color: var(--muted); font-size: 0.72rem; padding: 2rem 0 1rem; }
   </style>
 </head>
@@ -64,13 +78,23 @@
       <div class="header-sub">Dashboard · Somente leitura</div>
     </div>
   </div>
-  <span class="header-badge" id="period-badge">últimos 30d</span>
+
+  <!-- Seletor de período -->
+  <div class="period-bar">
+    <button class="period-btn" onclick="setPeriod(7)">7d</button>
+    <button class="period-btn" onclick="setPeriod(14)">14d</button>
+    <button class="period-btn active" id="btn-30" onclick="setPeriod(30)">30d</button>
+    <button class="period-btn" onclick="setPeriod(90)">90d</button>
+    <span class="period-sep">|</span>
+    <input class="date-input" type="date" id="date-from" onchange="applyCustomRange()">
+    <span style="color:var(--muted);font-size:.8rem;">até</span>
+    <input class="date-input" type="date" id="date-to" onchange="applyCustomRange()">
+  </div>
 </div>
 
 <div class="page">
 
-  <!-- KPIs -->
-  <div class="kpi-grid" id="kpi-grid">
+  <div class="kpi-grid">
     <div class="kpi-card"><div class="kpi-label">Investimento</div><div class="kpi-value" id="kpi-spend">—</div></div>
     <div class="kpi-card"><div class="kpi-label">Leads</div><div class="kpi-value" id="kpi-leads">—</div></div>
     <div class="kpi-card"><div class="kpi-label">CPL</div><div class="kpi-value" id="kpi-cpl">—</div></div>
@@ -78,42 +102,34 @@
     <div class="kpi-card"><div class="kpi-label">Fechados</div><div class="kpi-value" id="kpi-closed">—</div></div>
   </div>
 
-  <!-- Investimento x Leads -->
   <div class="panel">
     <div class="panel-head">
       <h3>Investimento × Leads</h3>
-      <span class="panel-sub">por dia</span>
+      <span class="panel-sub" id="lbl-daily">por dia · últimos 30d</span>
     </div>
-    <div class="panel-body">
-      <canvas id="chartDaily" height="90"></canvas>
-    </div>
+    <div class="panel-body"><canvas id="chartDaily" height="90"></canvas></div>
   </div>
 
   <div class="grid-2">
-    <!-- Donut canais -->
     <div class="panel">
       <div class="panel-head"><h3>Distribuição de Investimento</h3><span class="panel-sub">por canal</span></div>
-      <div class="panel-body" style="display:flex;flex-direction:column;align-items:center;gap:1rem;">
-        <div style="width:150px;height:150px;"><canvas id="chartDonut"></canvas></div>
-        <div id="donut-legend" style="width:100%;display:flex;flex-direction:column;gap:0.4rem;font-size:0.78rem;"></div>
+      <div class="panel-body">
+        <div class="donut-wrap">
+          <div class="donut-canvas-wrap"><canvas id="chartDonut"></canvas></div>
+          <div class="donut-legend" id="donut-legend"></div>
+        </div>
       </div>
     </div>
 
-    <!-- Funil -->
     <div class="panel">
       <div class="panel-head"><h3>Funil de Conversão</h3><span class="panel-sub">acumulado</span></div>
-      <div class="panel-body">
-        <canvas id="chartFunnel" height="130"></canvas>
-      </div>
+      <div class="panel-body"><canvas id="chartFunnel" height="130"></canvas></div>
     </div>
   </div>
 
-  <!-- Top UTMs -->
   <div class="panel">
     <div class="panel-head"><h3>Top UTM Campaigns</h3><span class="panel-sub">por leads</span></div>
-    <div class="panel-body">
-      <canvas id="chartUTM" height="90"></canvas>
-    </div>
+    <div class="panel-body"><canvas id="chartUTM" height="90"></canvas></div>
   </div>
 
   <div class="footer">Powered by IXCTraffic · Acesso restrito · Não compartilhe este link</div>
@@ -121,92 +137,134 @@
 
 <script>
 const PRODUTO = {{ produto | tojson }};
-const _CHANNEL_COLORS = { meta:'#1877F2', facebook:'#1877F2', google:'#EA4335', linkedin:'#0A66C2', tiktok:'#69C9D0' };
-const _FALLBACK = ['#a3ff00','#00c8d4','#6fb4ff','#c896ff','#ff9f40'];
+const _CC = { meta:'#1877F2', facebook:'#1877F2', google:'#EA4335', linkedin:'#0A66C2', tiktok:'#69C9D0' };
+const _FB = ['#a3ff00','#00c8d4','#6fb4ff','#c896ff','#ff9f40'];
 
 Chart.defaults.color = '#888';
 Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
 Chart.defaults.font.family = "'Inter','Segoe UI',sans-serif";
 
-async function loadData() {
-  const r = await fetch(`/api/dashboard/chart-data?days=30&produto=${encodeURIComponent(PRODUTO)}`);
+let _charts = {};
+let _currentDays = 30;
+
+function destroyAll() {
+  Object.values(_charts).forEach(c => { try { c.destroy(); } catch(e){} });
+  _charts = {};
+}
+
+function setPeriod(days) {
+  _currentDays = days;
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  const map = {7:'btn-7',14:'btn-14',30:'btn-30',90:'btn-90'};
+  // just mark active by matching text
+  document.querySelectorAll('.period-btn').forEach(b => {
+    if (b.textContent === days+'d') b.classList.add('active');
+  });
+  document.getElementById('date-from').value = '';
+  document.getElementById('date-to').value = '';
+  loadData(days, null, null);
+}
+
+function applyCustomRange() {
+  const from = document.getElementById('date-from').value;
+  const to   = document.getElementById('date-to').value;
+  if (!from || !to) return;
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  loadData(null, from, to);
+}
+
+async function loadData(days, dateFrom, dateTo) {
+  destroyAll();
+
+  let url = `/api/dashboard/chart-data?produto=${encodeURIComponent(PRODUTO)}`;
+  let periodLabel = '';
+  if (dateFrom && dateTo) {
+    url += `&date_from=${dateFrom}&date_to=${dateTo}`;
+    periodLabel = `${dateFrom} → ${dateTo}`;
+  } else {
+    url += `&days=${days||30}`;
+    periodLabel = `últimos ${days||30}d`;
+  }
+  document.getElementById('lbl-daily').textContent = `por dia · ${periodLabel}`;
+
+  const r = await fetch(url);
   const d = await r.json();
 
-  // ── KPIs ─────────────────────────────────────────────────────────────
+  // KPIs
   const totalSpend  = d.daily.reduce((s,x)=>s+x.spend,0);
   const totalLeads  = d.daily.reduce((s,x)=>s+x.leads,0);
   const totalMQL    = d.funnel.find(f=>f.label==='MQL')?.value  || 0;
   const totalClosed = d.funnel.find(f=>f.label==='Fechados')?.value || 0;
   const cpl = totalLeads ? totalSpend / totalLeads : 0;
-
-  document.getElementById('kpi-spend').textContent  = 'R$ ' + totalSpend.toLocaleString('pt-BR',{maximumFractionDigits:0});
+  document.getElementById('kpi-spend').textContent  = 'R$ ' + totalSpend.toLocaleString('pt-BR',{maximumFractionDigits:0});
   document.getElementById('kpi-leads').textContent  = totalLeads.toLocaleString('pt-BR');
-  document.getElementById('kpi-cpl').textContent    = 'R$ ' + cpl.toLocaleString('pt-BR',{maximumFractionDigits:0});
+  document.getElementById('kpi-cpl').textContent    = 'R$ ' + cpl.toLocaleString('pt-BR',{maximumFractionDigits:0});
   document.getElementById('kpi-mql').textContent    = totalMQL.toLocaleString('pt-BR');
   document.getElementById('kpi-closed').textContent = totalClosed.toLocaleString('pt-BR');
 
-  // ── Daily ─────────────────────────────────────────────────────────────
+  // Daily
   const dCtx = document.getElementById('chartDaily');
   if (dCtx && d.daily.length) {
-    new Chart(dCtx, {
+    _charts.daily = new Chart(dCtx, {
       data: {
         labels: d.daily.map(x=>x.date.slice(5)),
         datasets: [
-          { type:'bar',  label:'Investimento (R$)', data: d.daily.map(x=>x.spend), backgroundColor:'rgba(163,255,0,0.55)', yAxisID:'ySpend', borderRadius:3 },
-          { type:'line', label:'Leads', data: d.daily.map(x=>x.leads), borderColor:'#00c8d4', backgroundColor:'rgba(0,200,212,0.08)', tension:0.4, pointRadius:3, yAxisID:'yLeads' },
+          { type:'bar',  label:'Investimento (R$)', data:d.daily.map(x=>x.spend), backgroundColor:'rgba(163,255,0,0.55)', yAxisID:'ySpend', borderRadius:3 },
+          { type:'line', label:'Leads', data:d.daily.map(x=>x.leads), borderColor:'#00c8d4', backgroundColor:'rgba(0,200,212,0.08)', tension:0.4, pointRadius:3, yAxisID:'yLeads' },
         ],
       },
       options: {
         responsive:true, interaction:{mode:'index',intersect:false},
         scales: {
-          ySpend: { position:'left', ticks:{color:'#a3ff00',font:{size:10}, callback:v=>'R$'+(v>=1000?(v/1000).toFixed(1)+'k':v)}, grid:{color:'rgba(255,255,255,0.05)'} },
+          ySpend: { position:'left',  ticks:{color:'#a3ff00',font:{size:10}, callback:v=>'R$'+(v>=1000?(v/1000).toFixed(1)+'k':v)}, grid:{color:'rgba(255,255,255,0.05)'} },
           yLeads: { position:'right', ticks:{color:'#00c8d4',font:{size:10}}, grid:{drawOnChartArea:false} },
-          x: { ticks:{color:'#666',font:{size:10}, maxTicksLimit:10}, grid:{color:'rgba(255,255,255,0.03)'} },
+          x: { ticks:{color:'#666',font:{size:10},maxTicksLimit:12}, grid:{color:'rgba(255,255,255,0.03)'} },
         },
         plugins:{ legend:{labels:{color:'#aaa',boxWidth:12,padding:14,font:{size:11}}} },
       },
     });
   }
 
-  // ── Donut ─────────────────────────────────────────────────────────────
+  // Donut
   const doCtx = document.getElementById('chartDonut');
   const legend = document.getElementById('donut-legend');
+  legend.innerHTML = '';
   if (doCtx && d.channels.length) {
     const labels = d.channels.map(c=>c.channel);
     const values = d.channels.map(c=>c.spend);
     const total  = values.reduce((a,b)=>a+b,0);
-    const colors = labels.map((l,i)=>_CHANNEL_COLORS[l]||_FALLBACK[i%_FALLBACK.length]);
-    new Chart(doCtx, {
+    const colors = labels.map((l,i)=>_CC[l]||_FB[i%_FB.length]);
+    _charts.donut = new Chart(doCtx, {
       type:'doughnut',
       data:{ labels, datasets:[{data:values, backgroundColor:colors, borderWidth:0, hoverOffset:5}] },
-      options:{ responsive:false, cutout:'72%', plugins:{legend:{display:false}} },
+      options:{ responsive:true, cutout:'70%', plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>` R$ ${ctx.parsed.toLocaleString('pt-BR',{minimumFractionDigits:0})} (${(ctx.parsed/total*100).toFixed(1)}%)`}}} },
     });
     legend.innerHTML = d.channels.map((c,i)=>`
-      <div style="display:flex;align-items:center;gap:.5rem;">
-        <span style="width:9px;height:9px;border-radius:2px;background:${colors[i]};flex-shrink:0;"></span>
+      <div class="donut-row">
+        <span style="width:10px;height:10px;border-radius:2px;background:${colors[i]};flex-shrink:0;"></span>
         <span style="flex:1;text-transform:capitalize;">${c.channel}</span>
-        <span style="font-weight:600;">R$ ${Math.round(c.spend).toLocaleString('pt-BR')}</span>
-        <span style="color:var(--muted);">${(c.spend/total*100).toFixed(1)}%</span>
+        <span style="font-weight:600;">R$ ${Math.round(c.spend).toLocaleString('pt-BR')}</span>
+        <span style="color:var(--muted);margin-left:.35rem;">${(c.spend/total*100).toFixed(1)}%</span>
       </div>`).join('');
   }
 
-  // ── Funil ─────────────────────────────────────────────────────────────
+  // Funil
   const fCtx = document.getElementById('chartFunnel');
   if (fCtx && d.funnel.length) {
-    new Chart(fCtx, {
+    _charts.funnel = new Chart(fCtx, {
       type:'bar',
       data:{ labels:d.funnel.map(f=>f.label), datasets:[{data:d.funnel.map(f=>f.value), backgroundColor:['rgba(163,255,0,.7)','rgba(0,200,212,.7)','rgba(100,180,255,.7)','rgba(200,150,255,.7)','rgba(0,200,100,.85)'], borderRadius:4, borderSkipped:false}] },
-      options:{ indexAxis:'y', responsive:true, plugins:{legend:{display:false}}, scales:{ x:{ticks:{font:{size:10}}}, y:{ticks:{font:{size:11}}} } },
+      options:{ indexAxis:'y', responsive:true, plugins:{legend:{display:false}}, scales:{x:{ticks:{font:{size:10}}},y:{ticks:{font:{size:11}}}} },
     });
   }
 
-  // ── Top UTMs ──────────────────────────────────────────────────────────
+  // Top UTMs
   const uCtx = document.getElementById('chartUTM');
   if (uCtx && d.top_utms?.length) {
-    new Chart(uCtx, {
+    _charts.utms = new Chart(uCtx, {
       type:'bar',
       data:{
-        labels: d.top_utms.map(u=>u.utm.length>22?u.utm.slice(0,22)+'…':u.utm),
+        labels: d.top_utms.map(u=>u.utm.length>24?u.utm.slice(0,24)+'…':u.utm),
         datasets:[
           { label:'Leads', data:d.top_utms.map(u=>u.leads), backgroundColor:'rgba(163,255,0,0.75)', borderRadius:4, yAxisID:'yL' },
           { label:'Investimento', data:d.top_utms.map(u=>u.spend), backgroundColor:'rgba(100,180,255,0.5)', borderRadius:4, yAxisID:'yS' },
@@ -215,9 +273,9 @@ async function loadData() {
       options:{
         responsive:true, interaction:{mode:'index',intersect:false},
         scales:{
-          yL:{ position:'left', ticks:{color:'#a3ff00',font:{size:10}}, grid:{color:'rgba(255,255,255,0.05)'} },
+          yL:{ position:'left',  ticks:{color:'#a3ff00',font:{size:10}}, grid:{color:'rgba(255,255,255,0.05)'} },
           yS:{ position:'right', ticks:{color:'#6fb4ff',font:{size:10}, callback:v=>'R$'+(v>=1000?(v/1000).toFixed(1)+'k':v)}, grid:{drawOnChartArea:false} },
-          x:{ ticks:{font:{size:10}, maxRotation:25} },
+          x:{ ticks:{font:{size:10},maxRotation:25} },
         },
         plugins:{ legend:{labels:{color:'#aaa',boxWidth:12,padding:14,font:{size:11}}} },
       },
@@ -225,7 +283,13 @@ async function loadData() {
   }
 }
 
-loadData();
+// Inicializar datas com hoje e 30 dias atrás
+const today = new Date();
+const d30   = new Date(); d30.setDate(today.getDate() - 30);
+document.getElementById('date-to').value   = today.toISOString().slice(0,10);
+document.getElementById('date-from').value = d30.toISOString().slice(0,10);
+
+loadData(30, null, null);
 </script>
 </body>
 </html>
