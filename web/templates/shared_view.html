@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ label }} · IXCTraffic</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -18,9 +19,7 @@
       padding: 0.85rem 1.5rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .75rem;
     }
     .header-brand { display: flex; align-items: center; gap: 0.75rem; }
-    .header-logo  { width: 28px; height: 28px; background: var(--primary); border-radius: 6px;
-                    display: flex; align-items: center; justify-content: center;
-                    font-weight: 900; font-size: 0.8rem; color: #0a0a0a; flex-shrink:0; }
+    .header-logo  { width: 28px; height: 28px; flex-shrink: 0; }
     .header-title { font-weight: 700; font-size: 1rem; }
     .header-sub   { font-size: 0.75rem; color: var(--muted); }
 
@@ -83,7 +82,7 @@
 
 <div class="header">
   <div class="header-brand">
-    <div class="header-logo">IX</div>
+    <img class="header-logo" src="/static/favicon.svg" alt="IXCTraffic">
     <div>
       <div class="header-title">{{ label }}</div>
       <div class="header-sub">Dashboard · Somente leitura</div>
