@@ -442,11 +442,10 @@
       <div>
         <label style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.3rem;">Produto <span style="color:#ff4444">*</span></label>
         <select id="nl-produto" style="width:100%;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:8px;padding:.6rem .9rem;color:var(--text);font-family:inherit;font-size:.9rem;outline:none;">
-          <option value="">Selecione...</option>
-          {% for p in produtos %}
-          <option value="{{ p }}">{{ p }}</option>
-          {% endfor %}
+          <option value="">Carregando...</option>
         </select>
+        <input id="nl-produto-manual" type="text" placeholder="Ou digite o nome do produto manualmente"
+          style="display:none;margin-top:.4rem;width:100%;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:8px;padding:.6rem .9rem;color:var(--text);font-family:inherit;font-size:.9rem;outline:none;">
       </div>
       <div>
         <label style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.3rem;">Label (nome do acesso)</label>
@@ -802,12 +801,34 @@ async function loadLinks() {
 }
 loadLinks();
 
-function openNewLinkModal()  { document.getElementById('new-link-modal').style.display = 'flex'; }
+async function openNewLinkModal() {
+  document.getElementById('new-link-modal').style.display = 'flex';
+  const sel    = document.getElementById('nl-produto');
+  const manual = document.getElementById('nl-produto-manual');
+  try {
+    const r = await fetch('/api/accounts/list');
+    const d = await r.json();
+    if (d.produtos && d.produtos.length) {
+      sel.innerHTML = '<option value="">Selecione...</option>' +
+        d.produtos.map(p => `<option value="${p}">${p}</option>`).join('');
+      sel.style.display = '';
+      manual.style.display = 'none';
+    } else {
+      sel.style.display = 'none';
+      manual.style.display = '';
+      manual.placeholder = 'Digite o nome do produto';
+    }
+  } catch(e) {
+    sel.innerHTML = '<option value="">Erro ao carregar</option>';
+  }
+}
 function closeNewLinkModal() { document.getElementById('new-link-modal').style.display = 'none'; }
 function closeLinkResult()   { document.getElementById('link-result-modal').style.display = 'none'; loadLinks(); }
 
 async function createLink() {
-  const produto = document.getElementById('nl-produto').value;
+  const sel    = document.getElementById('nl-produto');
+  const manual = document.getElementById('nl-produto-manual');
+  const produto = (sel.style.display === 'none' ? manual.value : sel.value).trim();
   const label   = document.getElementById('nl-label').value.trim();
   const days    = parseInt(document.getElementById('nl-days').value) || 0;
   if (!produto) { showToast('Selecione um produto', 'error'); return; }

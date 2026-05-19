@@ -1240,6 +1240,11 @@ async def ltv_data():
     return _load_ltv()
 
 
+@app.get("/api/accounts/list")
+async def accounts_list():
+    return {"produtos": _list_products()}
+
+
 @app.post("/api/accounts/save")
 async def accounts_save(request: Request):
     data = await request.json()
