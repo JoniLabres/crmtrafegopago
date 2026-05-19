@@ -24,6 +24,17 @@
     .header-title { font-weight: 700; font-size: 1rem; }
     .header-sub   { font-size: 0.75rem; color: var(--muted); }
 
+    /* ── Seletor de produto ── */
+    .product-bar {
+      display: flex; align-items: center; gap: .5rem; flex-shrink: 0;
+    }
+    .product-select {
+      background: rgba(255,255,255,.06); border: 1px solid var(--border); color: var(--text);
+      border-radius: 8px; padding: .3rem .75rem; font-size: .82rem; font-family: inherit;
+      outline: none; cursor: pointer;
+    }
+    .product-select:focus { border-color: rgba(163,255,0,.4); }
+
     /* ── Seletor de período ── */
     .period-bar {
       display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
@@ -78,6 +89,17 @@
       <div class="header-sub">Dashboard · Somente leitura</div>
     </div>
   </div>
+
+  <!-- Seletor de produto (visível só com múltiplos produtos) -->
+  {% if produtos | length > 1 %}
+  <div class="product-bar">
+    <select class="product-select" id="produto-select" onchange="changeProduto(this.value)">
+      {% for p in produtos %}
+      <option value="{{ p }}">{{ p }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
 
   <!-- Seletor de período -->
   <div class="period-bar">
@@ -136,7 +158,8 @@
 </div>
 
 <script>
-const PRODUTO = {{ produto | tojson }};
+const PRODUTOS = {{ produtos | tojson }};
+let _currentProduto = {{ produto | tojson }};
 const _CC = { meta:'#1877F2', facebook:'#1877F2', google:'#EA4335', linkedin:'#0A66C2', tiktok:'#69C9D0' };
 const _FB = ['#a3ff00','#00c8d4','#6fb4ff','#c896ff','#ff9f40'];
 
@@ -147,6 +170,11 @@ Chart.defaults.font.family = "'Inter','Segoe UI',sans-serif";
 let _charts = {};
 let _currentDays = 30;
 
+function changeProduto(p) {
+  _currentProduto = p;
+  loadData(_currentDays, null, null);
+}
+
 function destroyAll() {
   Object.values(_charts).forEach(c => { try { c.destroy(); } catch(e){} });
   _charts = {};
@@ -154,11 +182,8 @@ function destroyAll() {
 
 function setPeriod(days) {
   _currentDays = days;
-  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
-  const map = {7:'btn-7',14:'btn-14',30:'btn-30',90:'btn-90'};
-  // just mark active by matching text
   document.querySelectorAll('.period-btn').forEach(b => {
-    if (b.textContent === days+'d') b.classList.add('active');
+    b.classList.toggle('active', b.textContent === days+'d');
   });
   document.getElementById('date-from').value = '';
   document.getElementById('date-to').value = '';
@@ -176,7 +201,7 @@ function applyCustomRange() {
 async function loadData(days, dateFrom, dateTo) {
   destroyAll();
 
-  let url = `/api/dashboard/chart-data?produto=${encodeURIComponent(PRODUTO)}`;
+  let url = `/api/dashboard/chart-data?produto=${encodeURIComponent(_currentProduto)}`;
   let periodLabel = '';
   if (dateFrom && dateTo) {
     url += `&date_from=${dateFrom}&date_to=${dateTo}`;

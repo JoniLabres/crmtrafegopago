@@ -2780,12 +2780,18 @@ def _save_shared_links(links: dict) -> None:
 @app.post("/api/shared-links/create")
 async def shared_link_create(request: Request):
     import secrets
-    data    = await request.json()
-    produto = data.get("produto", "").strip()
-    label   = data.get("label", "").strip() or produto
+    data     = await request.json()
+    # Accept "produtos" (list) or legacy "produto" (string)
+    produtos = data.get("produtos") or []
+    if not produtos:
+        p = data.get("produto", "").strip()
+        if p:
+            produtos = [p]
+    produtos = [x.strip() for x in produtos if x.strip()]
+    if not produtos:
+        return JSONResponse({"error": "Selecione ao menos um produto."}, status_code=400)
+    label   = data.get("label", "").strip() or ", ".join(produtos)
     days    = int(data.get("expires_days", 0))
-    if not produto:
-        return JSONResponse({"error": "Produto obrigatório."}, status_code=400)
     token   = secrets.token_urlsafe(32)
     expires = None
     if days > 0:
@@ -2793,14 +2799,14 @@ async def shared_link_create(request: Request):
         expires = (datetime.utcnow() + timedelta(days=days)).isoformat()
     links = _load_shared_links()
     links[token] = {
-        "produto":    produto,
+        "produtos":   produtos,
         "label":      label,
         "created_at": datetime.utcnow().isoformat(),
         "expires_at": expires,
     }
     _save_shared_links(links)
     base = os.getenv("APP_BASE_URL", "https://crmtrafegopago.vercel.app").rstrip("/")
-    return {"token": token, "url": f"{base}/view/{token}", "label": label, "produto": produto}
+    return {"token": token, "url": f"{base}/view/{token}", "label": label, "produtos": produtos}
 
 
 @app.get("/api/shared-links/list")
@@ -2836,9 +2842,12 @@ async def shared_view(request: Request, token: str):
     now = datetime.utcnow().isoformat()
     if meta.get("expires_at") and meta["expires_at"] < now:
         return HTMLResponse("<h2 style='font-family:sans-serif;text-align:center;padding:4rem;color:#888'>Este link expirou.</h2>", status_code=410)
+    # Support legacy "produto" (string) and new "produtos" (list)
+    produtos = meta.get("produtos") or ([meta["produto"]] if meta.get("produto") else [])
     return templates.TemplateResponse("shared_view.html", {
-        "request": request,
-        "produto": meta["produto"],
-        "label":   meta.get("label", meta["produto"]),
-        "token":   token,
+        "request":  request,
+        "produtos": produtos,
+        "produto":  produtos[0] if produtos else "",
+        "label":    meta.get("label", produtos[0] if produtos else ""),
+        "token":    token,
     })
