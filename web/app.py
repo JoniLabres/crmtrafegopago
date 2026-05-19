@@ -2761,3 +2761,79 @@ async def minha_conta_senha_post(
         "success": error is None,
         "error": error,
     })
+
+
+# ── Links compartilhados ──────────────────────────────────────────────────────
+
+def _load_shared_links() -> dict:
+    return config_store.load("shared_links", None, {}) or {}
+
+def _save_shared_links(links: dict) -> None:
+    config_store.save("shared_links", links, None)
+
+
+@app.post("/api/shared-links/create")
+async def shared_link_create(request: Request):
+    import secrets
+    data    = await request.json()
+    produto = data.get("produto", "").strip()
+    label   = data.get("label", "").strip() or produto
+    days    = int(data.get("expires_days", 0))
+    if not produto:
+        return JSONResponse({"error": "Produto obrigatório."}, status_code=400)
+    token   = secrets.token_urlsafe(32)
+    expires = None
+    if days > 0:
+        from datetime import timedelta
+        expires = (datetime.utcnow() + timedelta(days=days)).isoformat()
+    links = _load_shared_links()
+    links[token] = {
+        "produto":    produto,
+        "label":      label,
+        "created_at": datetime.utcnow().isoformat(),
+        "expires_at": expires,
+    }
+    _save_shared_links(links)
+    base = os.getenv("APP_BASE_URL", "https://crmtrafegopago.vercel.app").rstrip("/")
+    return {"token": token, "url": f"{base}/view/{token}", "label": label, "produto": produto}
+
+
+@app.get("/api/shared-links/list")
+async def shared_link_list():
+    links = _load_shared_links()
+    result = []
+    now = datetime.utcnow().isoformat()
+    for token, meta in links.items():
+        expired = bool(meta.get("expires_at") and meta["expires_at"] < now)
+        result.append({**meta, "token": token, "expired": expired})
+    return {"links": sorted(result, key=lambda x: x["created_at"], reverse=True)}
+
+
+@app.post("/api/shared-links/revoke")
+async def shared_link_revoke(request: Request):
+    data  = await request.json()
+    token = data.get("token", "")
+    links = _load_shared_links()
+    if token not in links:
+        return JSONResponse({"error": "Link não encontrado."}, status_code=404)
+    del links[token]
+    _save_shared_links(links)
+    return {"ok": True}
+
+
+@app.get("/view/{token}", response_class=HTMLResponse)
+async def shared_view(request: Request, token: str):
+    _apply_env_overrides()
+    links = _load_shared_links()
+    meta  = links.get(token)
+    if not meta:
+        return HTMLResponse("<h2 style='font-family:sans-serif;text-align:center;padding:4rem;color:#888'>Link inválido ou revogado.</h2>", status_code=404)
+    now = datetime.utcnow().isoformat()
+    if meta.get("expires_at") and meta["expires_at"] < now:
+        return HTMLResponse("<h2 style='font-family:sans-serif;text-align:center;padding:4rem;color:#888'>Este link expirou.</h2>", status_code=410)
+    return templates.TemplateResponse("shared_view.html", {
+        "request": request,
+        "produto": meta["produto"],
+        "label":   meta.get("label", meta["produto"]),
+        "token":   token,
+    })
