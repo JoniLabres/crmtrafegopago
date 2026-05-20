@@ -835,8 +835,14 @@ async def alertas(request: Request):
             stats["total"] = len(alerts)
             for a in alerts:
                 stats[a["severity"]] = stats.get(a["severity"],0) + 1
-            # Métricas do mês atual por produto
-            cur.execute("""
+            # Métricas por produto — mesmo período do filtro ativo
+            if date_from_str and date_to_str:
+                metrics_where = "date BETWEEN %s AND %s"
+                metrics_params: tuple = (date_from_str, date_to_str)
+            else:
+                metrics_where = "date >= CURRENT_DATE - %s"
+                metrics_params = (days,)
+            cur.execute(f"""
                 SELECT produto,
                        COALESCE(ROUND(SUM(spend)::numeric,2),0)       AS spend,
                        COALESCE(SUM(leads),0)                         AS leads,
@@ -844,10 +850,10 @@ async def alertas(request: Request):
                        COALESCE(COUNT(DISTINCT date),0)               AS dias,
                        COALESCE(ROUND(AVG(NULLIF(cpl,0))::numeric,2),0) AS cpl_medio
                 FROM campaigns_daily
-                WHERE date >= DATE_TRUNC('month', CURRENT_DATE)
+                WHERE {metrics_where}
                   AND produto IS NOT NULL
                 GROUP BY produto
-            """)
+            """, metrics_params)
             for row in cur.fetchall():
                 p = row[0]
                 dias = row[4] or 1

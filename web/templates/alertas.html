@@ -107,12 +107,12 @@
         <div style="font-size:0.9rem;font-weight:700;color:var(--primary);">{{ produto }}</div>
         {% if spend_real > 0 %}
         <div style="font-size:0.75rem;color:var(--muted);">
-          Mês atual — Gasto: <strong>R$ {{ "%.0f"|format(spend_real) }}</strong>
+          {{ period_label }} — Gasto: <strong>R$ {{ "%.0f"|format(spend_real) }}</strong>
           | Leads: <strong>{{ leads_real }}</strong>
           | CPL médio: <strong>R$ {{ "%.0f"|format(cpl_real) }}</strong>
         </div>
         {% else %}
-        <div style="font-size:0.75rem;color:var(--muted);">Sem dados no mês atual</div>
+        <div style="font-size:0.75rem;color:var(--muted);">Sem dados — {{ period_label }}</div>
         {% endif %}
       </div>
 
