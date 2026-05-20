@@ -792,17 +792,44 @@ async def campanhas(request: Request):
 async def alertas(request: Request):
     _apply_env_overrides()
     alerts, stats = [], {"total":0,"critico":0,"atencao":0,"ok":0}
-    # Métricas reais por produto (mês atual) para mostrar progresso vs meta
     produto_metrics: dict = {}
+
+    # ── Date filter ───────────────────────────────────────────────────────────
+    from datetime import date as _date, timedelta as _td
+    params = request.query_params
+    date_from_str = params.get("date_from", "").strip()
+    date_to_str   = params.get("date_to",   "").strip()
+    try:
+        days = int(params.get("days", 2))
+        days = max(1, min(days, 365))
+    except ValueError:
+        days = 2
+    if date_from_str and date_to_str:
+        try:
+            _date.fromisoformat(date_from_str)
+            _date.fromisoformat(date_to_str)
+            alert_where = "sent_at::date BETWEEN %s AND %s"
+            alert_params: tuple = (date_from_str, date_to_str)
+            period_label = f"{date_from_str} → {date_to_str}"
+        except ValueError:
+            date_from_str = date_to_str = ""
+            alert_where  = "sent_at >= NOW() - (%s || ' hours')::interval"
+            alert_params = (str(days * 24),)
+            period_label = f"últimas {days * 24}h"
+    else:
+        alert_where  = "sent_at >= NOW() - (%s || ' hours')::interval"
+        alert_params = (str(days * 24),)
+        period_label = f"últimas {days * 24}h"
+
     try:
         import psycopg2
         conn = psycopg2.connect(get_db_url())
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(f"""
                 SELECT alert_type, severity, message, sent_at::text, campaign_utm, produto
-                FROM alerts_log WHERE sent_at >= NOW() - INTERVAL '48 hours'
+                FROM alerts_log WHERE {alert_where}
                 ORDER BY sent_at DESC
-            """)
+            """, alert_params)
             cols = [d[0] for d in cur.description]
             alerts = [dict(zip(cols, r)) for r in cur.fetchall()]
             stats["total"] = len(alerts)
@@ -849,6 +876,8 @@ async def alertas(request: Request):
         "thresholds": thresholds,
         "produto_metrics": produto_metrics,
         "active_product": _active_product, "alert_count": stats.get("critico",0),
+        "period_label": period_label,
+        "date_from": date_from_str, "date_to": date_to_str, "days": days,
     })
 
 @app.get("/agente", response_class=HTMLResponse)

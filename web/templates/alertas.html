@@ -13,7 +13,7 @@
 
 <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);">
   <div class="kpi-card">
-    <div class="kpi-label">Total 48h</div>
+    <div class="kpi-label">Total — {{ period_label }}</div>
     <div class="kpi-value">{{ stats.total }}</div>
   </div>
   <div class="kpi-card">
@@ -29,6 +29,26 @@
     <div class="kpi-value green">{{ stats.ok }}</div>
   </div>
 </div>
+
+<!-- Filtro de período -->
+<form method="get" action="/alertas" style="display:flex;align-items:center;gap:0.5rem;margin:1rem 0;flex-wrap:wrap;">
+  <select name="days" id="alert-days-select" class="input input-dark" style="width:auto;padding:0.4rem 0.75rem;font-size:0.875rem;" onchange="handleAlertDaysChange(this)">
+    <option value="1"  {% if days == 1  and not date_from %}selected{% endif %}>Últimas 24h</option>
+    <option value="2"  {% if days == 2  and not date_from %}selected{% endif %}>Últimas 48h</option>
+    <option value="7"  {% if days == 7  and not date_from %}selected{% endif %}>Últimos 7 dias</option>
+    <option value="30" {% if days == 30 and not date_from %}selected{% endif %}>Últimos 30 dias</option>
+    <option value="custom" {% if date_from %}selected{% endif %}>Personalizado</option>
+  </select>
+  <div id="alert-custom-dates" style="display:{% if date_from %}flex{% else %}none{% endif %};gap:0.4rem;align-items:center;">
+    <input type="date" name="date_from" class="input input-dark" style="padding:0.4rem 0.6rem;font-size:0.875rem;" value="{{ date_from or '' }}">
+    <span style="color:var(--muted);font-size:0.8rem;">até</span>
+    <input type="date" name="date_to" class="input input-dark" style="padding:0.4rem 0.6rem;font-size:0.875rem;" value="{{ date_to or '' }}">
+    <button type="submit" class="btn btn-outline btn-sm">Aplicar</button>
+  </div>
+  {% if date_from %}
+  <a href="/alertas" class="btn btn-ghost btn-sm">Limpar filtro</a>
+  {% endif %}
+</form>
 
 <div class="tabs">
   <div class="tab active" onclick="filterAlerts('')">Todos ({{ stats.total }})</div>
@@ -56,7 +76,7 @@
     </div>
     {% else %}
     <div style="text-align:center;color:var(--muted);padding:3rem;font-size:0.875rem;">
-      Nenhum alerta nas últimas 48h.<br>
+      Nenhum alerta — {{ period_label }}.<br>
       <span class="text-green">Sistema operando dentro das metas.</span>
     </div>
     {% endfor %}
@@ -176,6 +196,15 @@
 
 {% block scripts %}
 <script>
+function handleAlertDaysChange(sel) {
+  const custom = document.getElementById('alert-custom-dates');
+  if (sel.value === 'custom') {
+    custom.style.display = 'flex';
+  } else {
+    custom.style.display = 'none';
+    sel.closest('form').submit();
+  }
+}
 function filterAlerts(filter) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   event.target.classList.add('active');
