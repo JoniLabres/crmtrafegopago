@@ -1109,13 +1109,15 @@ async def agent_reset():
 
 @app.post("/api/alerts/check")
 async def alerts_check():
+    _apply_env_overrides()
     try:
         from alerts import AlertSystem
         system = AlertSystem()
         found = system.check_all()
-        return {"count": len(found)}
+        return {"count": len(found), "alerts": [a.get("message","") for a in found]}
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        logger.error("alerts_check error: %s", e, exc_info=True)
+        return JSONResponse({"error": str(e), "count": 0}, status_code=500)
 
 @app.post("/api/alerts/thresholds")
 async def alerts_thresholds(request: Request):
@@ -1176,7 +1178,16 @@ async def pipeline_cron(request: Request):
         total = run_pipeline(date_from=date_from, date_to=date_to)
         _save_last_sync(total, date_from, date_to)
         logger.info("Cron pipeline OK: %d rows", total)
-        return {"ok": True, "rows": total, "date_from": str(date_from), "date_to": str(date_to)}
+        # Run alert checks after every pipeline sync
+        alert_count = 0
+        try:
+            from alerts import AlertSystem
+            alert_count = len(AlertSystem().check_all())
+            logger.info("Cron alerts OK: %d alertas", alert_count)
+        except Exception as ae:
+            logger.warning("Cron alerts error (não crítico): %s", ae)
+        return {"ok": True, "rows": total, "alerts": alert_count,
+                "date_from": str(date_from), "date_to": str(date_to)}
     except Exception as e:
         logger.error("Cron pipeline error: %s", e, exc_info=True)
         return JSONResponse({"error": str(e)}, status_code=500)

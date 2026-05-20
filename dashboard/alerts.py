@@ -54,7 +54,9 @@ class AlertSystem:
     def check_cpl_alto(self, produto: str, data: list = None) -> list:
         """CPL > 130% da meta por 3+ dias consecutivos."""
         alerts = []
-        meta = self.thresholds.get(produto, {}).get("cpl_meta", 100.0)
+        meta = self.thresholds.get(produto, {}).get("cpl_meta", 0.0)
+        if not meta:
+            return alerts
 
         rows = data if data is not None else self._query_cpl_alto(produto, meta)
         for row in rows:
@@ -78,7 +80,9 @@ class AlertSystem:
     def check_roas_baixo(self, produto: str, data: list = None) -> list:
         """ROAS < meta por 7+ dias."""
         alerts = []
-        meta = self.thresholds.get(produto, {}).get("roas_meta", 4.0)
+        meta = self.thresholds.get(produto, {}).get("roas_meta", 0.0)
+        if not meta:
+            return alerts
 
         rows = data if data is not None else self._query_roas_baixo(produto, meta)
         for row in rows:
@@ -123,23 +127,26 @@ class AlertSystem:
         return alerts
 
     def check_budget_pace(self, produto: str, data: list = None) -> list:
-        """Pace > 110% do budget proporcional do mês."""
+        """Pace > 110% do budget proporcional do mês (nível de produto, não por campanha)."""
         alerts = []
-        budget = self.thresholds.get(produto, {}).get("budget_mensal", 5000.0)
+        budget = self.thresholds.get(produto, {}).get("budget_mensal", 0.0)
+        if not budget:
+            return alerts
 
         rows = data if data is not None else self._query_budget_pace(produto, budget)
         for row in rows:
             pace = row.get("pace_pct", 0)
             msg = (
-                f"Budget acelerado em *{row['campaign_utm']}* ({row['channel']}): "
-                f"pace {pace:.0f}% "
+                f"Budget acelerado em *{produto}*: "
+                f"pace {pace:.0f}% do mês "
                 f"(gasto R${row.get('gasto_acumulado', 0):.2f} vs "
-                f"proporcional R${row.get('budget_proporcional', 0):.2f})"
+                f"proporcional R${row.get('budget_proporcional', 0):.2f} / "
+                f"budget R${budget:.2f}/mês)"
             )
             alerts.append({
                 "alert_type": "budget_pace",
-                "channel": row["channel"],
-                "campaign_utm": row["campaign_utm"],
+                "channel": "all",
+                "campaign_utm": "all",
                 "produto": produto,
                 "severity": "atencao",
                 "message": msg,
@@ -236,21 +243,25 @@ class AlertSystem:
         return self._run_query(sql, {"produto": produto})
 
     def _query_budget_pace(self, produto: str, budget: float) -> list:
+        # Compares TOTAL product spend (not per campaign) against the monthly budget
         sql = """
         WITH mensal AS (
-            SELECT campaign_utm, channel, %(produto)s AS produto, SUM(spend) AS gasto,
-                DATE_PART('day', CURRENT_DATE) AS dias_p,
-                DATE_PART('day', DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day') AS dias_m
+            SELECT
+                %(produto)s AS produto,
+                SUM(spend) AS gasto,
+                DATE_PART('day', CURRENT_DATE)::numeric AS dias_p,
+                DATE_PART('day', DATE_TRUNC('month', CURRENT_DATE)
+                    + INTERVAL '1 month' - INTERVAL '1 day')::numeric AS dias_m
             FROM campaigns_daily
-            WHERE DATE_TRUNC('month', date) = DATE_TRUNC('month', CURRENT_DATE) AND produto = %(produto)s
-            GROUP BY campaign_utm, channel
+            WHERE DATE_TRUNC('month', date) = DATE_TRUNC('month', CURRENT_DATE)
+              AND produto = %(produto)s
         )
-        SELECT campaign_utm, channel, produto,
-            ROUND(gasto::numeric,2) AS gasto_acumulado,
-            ROUND((%(budget)s * dias_p / dias_m)::numeric,2) AS budget_proporcional,
-            ROUND((gasto / NULLIF(%(budget)s * dias_p / dias_m, 0) * 100)::numeric,1) AS pace_pct
+        SELECT produto,
+            ROUND(gasto::numeric, 2) AS gasto_acumulado,
+            ROUND((%(budget)s::numeric * dias_p / NULLIF(dias_m,0))::numeric, 2) AS budget_proporcional,
+            ROUND((gasto / NULLIF(%(budget)s::numeric * dias_p / NULLIF(dias_m,0), 0) * 100)::numeric, 1) AS pace_pct
         FROM mensal
-        WHERE gasto > %(budget)s * dias_p / dias_m * 1.10
+        WHERE gasto > %(budget)s::numeric * dias_p / NULLIF(dias_m,0) * 1.10
         """
         return self._run_query(sql, {"produto": produto, "budget": budget})
 
@@ -287,7 +298,12 @@ class AlertSystem:
 
     def check_all(self) -> list:
         all_alerts = []
-        for produto in self.thresholds:
+        for produto, t in self.thresholds.items():
+            # Skip products with no thresholds configured (all zeros)
+            configured = any(v for v in t.values() if isinstance(v, (int, float)) and v > 0)
+            if not configured:
+                logger.info("check_all: produto '%s' sem metas definidas, pulando", produto)
+                continue
             for check_fn in [
                 self.check_cpl_alto,
                 self.check_roas_baixo,
